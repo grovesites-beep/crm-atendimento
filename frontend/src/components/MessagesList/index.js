@@ -26,7 +26,7 @@ import {
 } from "@material-ui/icons";
 
 import MarkdownWrapper from "../MarkdownWrapper";
-import VcardPreview from "../VcardPreview";
+import VcardPreview from "../VCardPreview";
 import LocationPreview from "../LocationPreview";
 import ModalImageCors from "../ModalImageCors";
 import MessageOptionsMenu from "../MessageOptionsMenu";

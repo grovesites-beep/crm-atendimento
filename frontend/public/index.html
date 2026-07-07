@@ -1,112 +1,91 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <title>Whaticket | Saas</title>
-    <link
-        rel="stylesheet"
-        href="https://fonts.googleapis.com/css?family=Open+Sans:300,400,600,700&display=swap"
-    />
+<html lang="pt" class="h-full">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport"
+      content="minimum-scale=1, initial-scale=1, width=device-width" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="color-scheme" content="light" />
+    <meta http-equiv="Cache-Control"
+      content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+
+    <title>AtendeTicket</title>
+
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/apple-touch-icon.png" />
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
-    <meta name="theme-color" content="#222222" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
-    <style>
-        #splash-screen {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: white;
-            z-index: 9999;
-        }
 
-        #splash-content {
-            text-align: center;
-        }
-
-        .spinner {
-            width: 50px;
-            height: 50px;
-            border: 5px solid #e0e0e0;
-            border-top: 5px solid #2DDD7F;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .progress-container {
-            width: 75%;
-            height: 8px;
-            background-color: #e0e0e0;
-            border-radius: 4px;
-            margin-top: 15px;
-            overflow: hidden;
-            margin-left: auto;
-            margin-right: auto;
-        }
-
-        .progress-bar {
-            height: 100%;
-            background-color: #2DDD7F;
-            width: 0;
-            transition: width 0.3s;
-        }
-    </style>
-</head>
-
-<body>
-    <div id="splash-screen">
-        <div id="splash-content">
-            <div class="spinner"></div>
-            <div class="progress-container">
-                <div class="progress-bar" id="progress-bar"></div>
-            </div>
-        </div>
-    </div>
-    <div id="root"></div>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
-
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
     <script>
-        let progress = 0;
-        const progressBar = document.getElementById('progress-bar');
-        const interval = setInterval(() => {
-            if (progress < 60) {
-                progress += 8;
-            } else if (progress < 90) {
-                progress += 5;
+      (function () {
+        var path = location.pathname || "/";
+        var isLogin = /\/(login|signup|forgot-password)(\/|$|\?)/i.test(path) || path === "/";
+        try { 
+          if (isLogin) {
+            localStorage.setItem("theme", "light");
+            document.documentElement.classList.remove("dark");
+            document.documentElement.setAttribute("data-theme", "light");
+            document.addEventListener("DOMContentLoaded", function() {
+              document.body.classList.add("login-page");
+            });
+          } else {
+            var theme = localStorage.getItem("theme");
+            if (theme === "dark") {
+              document.documentElement.classList.add("dark");
+              document.documentElement.setAttribute("data-theme", "dark");
             } else {
-                progress += (100 - progress) / 10;
+              document.documentElement.classList.remove("dark");
+              document.documentElement.setAttribute("data-theme", "light");
             }
-            progressBar.style.width = progress + '%';
-
-            if (progress >= 100) {
-                clearInterval(interval);
-                setTimeout(() => {
-                    document.getElementById('splash-screen').remove();
-                }, 300);
-            }
-        }, 800);
-
-        window.finishProgress = () => {
-            progress = 100;
-        };
-
-        window.onload = () => {
-            // Optional: Remove splash screen after window is fully loaded
-        };
+          }
+        } catch (e) {
+          document.documentElement.classList.remove("dark");
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      })();
     </script>
-</body>
+    <style>
+      :root {
+        --brand: #10aa62;
+        --bg-color: #f8f9fa;
+        --card-bg: #ffffff;
+        --card-stroke: #e5e7eb;
+        --text-title: #1f2937;
+        --text-body: #4b5563;
+      }
+      body {
+        font-family: 'Inter', sans-serif;
+      }
+      body.login-page .MuiInputBase-root,
+      body.login-page .MuiOutlinedInput-root,
+      body.login-page .MuiOutlinedInput-input,
+      body.login-page .MuiInputBase-input,
+      body.login-page .MuiInputAdornment-root {
+        background-color: #ffffff !important;
+        color: #000000 !important;
+      }
+      body.login-page .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline {
+        border-color: #cbd5e1 !important;
+      }
+      body.login-page .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline {
+        border-color: #10b981 !important;
+      }
+    </style>
+  </head>
+
+  <body class="h-full antialiased"
+    style="background-color: var(--bg-color); color: var(--text-body);">
+    <div id="root"></div>
+    <noscript class="block px-6 py-4 text-sm">
+      Você precisa habilitar o JavaScript para executar este app.
+    </noscript>
+  </body>
 </html>

@@ -8,13 +8,16 @@ import {
   AutoIncrement,
   ForeignKey,
   BelongsTo,
-  HasMany
+  HasMany,
+  AllowNull
 } from "sequelize-typescript";
 import CampaignShipping from "./CampaignShipping";
 import Company from "./Company";
 import ContactList from "./ContactList";
 import Whatsapp from "./Whatsapp";
-import Files from "./Files";
+import User from "./User";
+import Queue from "./Queue";
+import Files from "./Files"; // Adicionada a importação do modelo Files
 
 @Table({ tableName: "Campaigns" })
 class Campaign extends Model<Campaign> {
@@ -101,15 +104,38 @@ class Campaign extends Model<Campaign> {
   @BelongsTo(() => Whatsapp)
   whatsapp: Whatsapp;
 
+  // CÓDIGO NOVO ADICIONADO A PARTIR DO EXEMPLO
+  @AllowNull
   @ForeignKey(() => Files)
   @Column
   fileListId: number;
 
   @BelongsTo(() => Files)
   fileList: Files;
+  // FIM DO CÓDIGO NOVO
 
   @HasMany(() => CampaignShipping)
   shipping: CampaignShipping[];
+
+  @ForeignKey(() => User)
+  @Column
+  userId: number;
+
+  @BelongsTo(() => User)
+  user: User;
+
+  @ForeignKey(() => Queue)
+  @Column
+  queueId: number;
+
+  @BelongsTo(() => Queue)
+  queue: Queue;
+
+  @Column({ defaultValue: "closed" })
+  statusTicket: string;
+
+  @Column({ defaultValue: "disabled" })
+  openTicket: string;
 }
 
 export default Campaign;

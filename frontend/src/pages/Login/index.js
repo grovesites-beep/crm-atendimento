@@ -1,197 +1,211 @@
-import React, { useState, useContext, useEffect } from "react";
+import React, { useState, useEffect, useContext } from "react";
+import { Mail, Lock, Eye, EyeOff, BotMessageSquare } from "lucide-react";
 import { Link as RouterLink } from "react-router-dom";
 
-import Button from "@material-ui/core/Button";
-import CssBaseline from "@material-ui/core/CssBaseline";
-import TextField from "@material-ui/core/TextField";
-import Link from "@material-ui/core/Link";
-import Grid from "@material-ui/core/Grid"; 
-import Box from "@material-ui/core/Box";
-import Typography from "@material-ui/core/Typography";
-import { makeStyles } from "@material-ui/core/styles";
-import Container from "@material-ui/core/Container";
-import { versionSystem } from "../../../package.json";
-import { i18n } from "../../translate/i18n";
+import { Helmet } from "react-helmet";
 import api from "../../services/api";
-import { nomeEmpresa } from "../../../package.json";
 import { AuthContext } from "../../context/Auth/AuthContext";
-//import logo from "../../assets/logo.png";
+import { i18n } from "../../translate/i18n";
+import defaultLoginLogo from "../../assets/login-logo-default.png";
 
+const backendUrl = process.env.REACT_APP_BACKEND_URL || "";
 
-const Copyright = () => {
-	return (
-		<Typography variant="body2" color="primary" align="center">
-			{"Copyright "}
- 			<Link color="primary" href="#">
- 				{ nomeEmpresa } - v { versionSystem }
- 			</Link>{" "}
- 			{new Date().getFullYear()}
- 			{"."}
- 		</Typography>
- 	);
- };
-
-const useStyles = makeStyles(theme => ({
-	root: {
-		width: "100vw",
-		height: "100vh",
-		background: "linear-gradient(to right, #2f0549 , #a729f4 , #2f0549)",
-		//backgroundImage: "url(https://i.imgur.com/CGby9tN.png)",
-		backgroundRepeat: "no-repeat",
-		backgroundSize: "100% 100%",
-		backgroundPosition: "center",
-		display: "flex",
-		flexDirection: "column",
-		alignItems: "center",
-		justifyContent: "center",
-		textAlign: "center",
-	},
-	paper: {
-		backgroundColor: theme.palette.login, //DARK MODE PLW DESIGN//
-		display: "flex",
-		flexDirection: "column",
-		alignItems: "center",
-		padding: "55px 30px",
-		borderRadius: "12.5px",
-	},
-	avatar: {
-		margin: theme.spacing(1),  
-		backgroundColor: theme.palette.secondary.main,
-	},
-	form: {
-		width: "100%", // Fix IE 11 issue.
-		marginTop: theme.spacing(1),
-	},
-	submit: {
-		margin: theme.spacing(3, 0, 2),
-	},
-	powered: {
-		color: "white"
-	}
-}));
+const resolveImageUrl = (value, fallback) => {
+  if (!value) return fallback;
+  if (value.startsWith("http")) return value;
+  if (!backendUrl) return value;
+  const base = backendUrl.replace(/\/+$/, "");
+  const clean = value.replace(/^\/+/, "");
+  return `${base}/${clean}`;
+};
 
 const Login = () => {
-	const classes = useStyles();
+  const { handleLogin } = useContext(AuthContext);
 
-	const [user, setUser] = useState({ email: "", password: "" });
+  const [branding, setBranding] = useState({
+    loginLogo: "/logo.png",
+    loginBackground: "#91eeffff",
+    loginWhatsapp: "https://wa.me/5519997530219",
+  });
+  const [user, setUser] = useState({
+    email: "",
+    password: "",
+    remember: false,
+  });
+  const [showPassword, setShowPassword] = useState(false);
+  const [userCreationEnabled, setUserCreationEnabled] = useState(true);
 
-	const { handleLogin } = useContext(AuthContext);
-	const [viewregister, setviewregister] = useState('disabled');
-
-	const handleChangeInput = e => {
-		setUser({ ...user, [e.target.name]: e.target.value });
-	};
-	
-	    useEffect(() => {
-    	fetchviewregister();
-  	}, []);
-	
-		const fetchviewregister = async () => {
-  
- 
+  useEffect(() => {
     try {
-    	const responsev = await api.get("/settings/viewregister");
-      	const viewregisterX = responsev?.data?.value;
-      	// console.log(viewregisterX);
-      	setviewregister(viewregisterX);
-    	} catch (error) {
-    		console.error('Error retrieving viewregister', error);
-    	}
-  	};
+      localStorage.setItem("theme", "light");
+    } catch { }
+    document.documentElement.classList.remove("dark");
+    document.body.classList.add("login-page");
 
+    return () => document.body.classList.remove("login-page");
+  }, []);
 
-	const handlSubmit = e => {
-		e.preventDefault();
-		handleLogin(user);
-	};
-	
-	const logo = `${process.env.REACT_APP_BACKEND_URL}/public/logotipos/login.png`;
-    const randomValue = Math.random(); // Generate a random number
-  
-    const logoWithRandom = `${logo}?r=${randomValue}`;
+  useEffect(() => {
+    const fetchBranding = async () => {
+      try {
+        const { data } = await api.get("/global-config/public-branding");
+        setBranding({
+          loginLogo: data.loginLogo || "/logo.png",
+          loginBackground: "#e8f1f5ff",
+          loginWhatsapp: data.loginWhatsapp || "https://wa.me/5541992098329",
+        });
+      } catch (err) {
+        console.error("Erro ao carregar branding:", err);
+      }
+    };
 
-	return (
-		<div className={classes.root}>
-		<Container component="main" maxWidth="xs">
-			<CssBaseline/>
-			<div className={classes.paper}>
-				<div>
-					<img style={{ margin: "0 auto", width: "80%" }} src={logoWithRandom} alt={`${process.env.REACT_APP_NAME_SYSTEM}`} />
-				</div>
-				{/*<Typography component="h1" variant="h5">
-					{i18n.t("login.title")}
-				</Typography>*/}
-				<form className={classes.form} noValidate onSubmit={handlSubmit}>
-					<TextField
-						variant="outlined"
-						margin="normal"
-						required
-						fullWidth
-						id="email"
-						label={i18n.t("login.form.email")}
-						name="email"
-						value={user.email}
-						onChange={handleChangeInput}
-						autoComplete="email"
-						autoFocus
-					/>
-					<TextField
-						variant="outlined"
-						margin="normal"
-						required
-						fullWidth
-						name="password"
-						label={i18n.t("login.form.password")}
-						type="password"
-						id="password"
-						value={user.password}
-						onChange={handleChangeInput}
-						autoComplete="current-password"
-					/>
-					
-					<Grid container justify="flex-end">
-					  <Grid item xs={6} style={{ textAlign: "right" }}>
-						<Link component={RouterLink} to="/forgetpsw" variant="body2">
-						  Esqueceu sua senha?
-						</Link>
-					  </Grid>
-					</Grid>
-				
-					
-					<Button
-						type="submit"
-						fullWidth
-						variant="contained"
-						color="primary"
-						className={classes.submit}
-					>
-						{i18n.t("login.buttons.submit")}
-					</Button>
-                    {viewregister === "enabled" && (
-                    <>
-					<Grid container>
-						<Grid item>
-							<Link
-								href="#"
-								variant="body2"
-								component={RouterLink}
-								to="/signup"
-							>
-								{i18n.t("login.buttons.register")}
-							</Link>
-						</Grid>
-					</Grid>
-                    </>
-                    )}
-				
-					
-				</form>
-			
-			</div>
-			<Box mt={8}><Copyright /></Box>
-		</Container>
-		</div>
-	);
+    fetchBranding();
+  }, []);
+
+  useEffect(() => {
+    const fetchUserCreationStatus = async () => {
+      try {
+        const { data } = await api.get("/settings/userCreation");
+        setUserCreationEnabled(data.userCreation === "enabled");
+      } catch {
+        setUserCreationEnabled(false);
+      }
+    };
+
+    fetchUserCreationStatus();
+  }, []);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const lang = localStorage.getItem("i18nextLng") || "pt";
+    i18n.changeLanguage(lang);
+    handleLogin(user);
+  };
+
+  return (
+    <>
+      <Helmet>
+        <title>Login - AtendeTicket</title>
+        <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+      </Helmet>
+      <div className="min-h-screen bg-[#f5f5f5] flex flex-col">
+        <main className="flex-1 flex items-center justify-center p-4">
+          <div className="bg-background rounded-lg shadow-lg overflow-hidden flex flex-col lg:flex-row max-w-4xl w-full">
+            <div
+              className="p-8 lg:p-12 flex flex-col itemss-center justify-center lg:w-1/2"
+              style={{ backgroundColor: branding.loginBackground }}
+            >
+              <div className="w-full max-w-[300px] mb-6 bg-white/80 p-3 rounded-xl shadow">
+                <img
+                  src={resolveImageUrl(branding.loginLogo, defaultLoginLogo)}
+                  alt="Logo"
+                  className="w-full h-auto"
+                />
+              </div>
+              <h2 className="text-xl font-bold text-[#333] text-center mb-2">
+                Bem-vindo de volta!
+              </h2>
+              <p className="text-[#444] text-center text-sm">
+                Acesse sua conta para continuar utilizando o nosso sistema
+              </p>
+            </div>
+
+            <div className="p-8 lg:p-12 lg:w-1/2 flex flex-col">
+              <form className="space-y-4" onSubmit={handleSubmit}>
+                <div>
+                  <label className="block text-sm font-medium text-[#333] mb-2">
+                    E-mail
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999] w-5 h-5" />
+                    <input
+                      type="email"
+                      value={user.email}
+                      onChange={(e) => setUser({ ...user, email: e.target.value })}
+                      className="w-full pl-10 pr-4 py-3 border border-[#ddd] rounded-lg focus:outline-none focus:border-[#0b88e8]"
+                      placeholder="Digite seu e-mail"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="block text-sm font-medium text-[#333]">
+                      Senha
+                    </label>
+                    <RouterLink
+                      to="/forgot-password"
+                      className="text-sm text-[#0b88e8] hover:underline"
+                    >
+                      Esqueceu sua senha?
+                    </RouterLink>
+                  </div>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999] w-5 h-5" />
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={user.password}
+                      onChange={(e) => setUser({ ...user, password: e.target.value })}
+                      className="w-full pl-10 pr-12 py-3 border border-[#ddd] rounded-lg focus:outline-none focus:border-[#0b88e8]"
+                      placeholder="Digite sua senha"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#999]"
+                    >
+                      {showPassword ? <EyeOff /> : <Eye />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={user.remember}
+                    onChange={(e) =>
+                      setUser({ ...user, remember: e.target.checked })
+                    }
+                  />
+                  <span className="text-[#333]">Lembrar de mim</span>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full bg-[#0b88e8] hover:bg-[#0b68b0] text-white font-medium py-3 rounded-lg transition"
+                >
+                  Entrar
+                </button>
+              </form>
+
+              {userCreationEnabled && (
+                <p className="text-center text-[#666] text-sm mt-6">
+                  É novo aqui?{" "}
+                  <RouterLink
+                    to="/signup"
+                    className="text-[#0b88e8] hover:underline font-medium"
+                  >
+                    Crie sua conta
+                  </RouterLink>
+                </p>
+              )}
+            </div>
+          </div>
+        </main>
+
+        <button
+          onClick={() => window.open(branding.loginWhatsapp)}
+          className="fixed bottom-6 right-6 w-16 h-16 rounded-full shadow-xl flex items-center justify-center text-white hover:scale-110 transition animate-pulse bg-customBlue"
+        >
+          <BotMessageSquare size={32} />
+        </button>
+
+        <footer className="py-4 text-center text-[#666] text-sm border-t border-[#ddd] bg-background">
+          AtendeTicket 2025 © Todos os direitos reservados
+        </footer>
+      </div>
+    </>
+  );
 };
 
 export default Login;

@@ -17,9 +17,11 @@ interface Request {
   pageNumber?: string;
   status?: string;
   date?: string;
+  dateStart?: string;
+  dateEnd?: string;
   updatedAt?: string;
   showAll?: string;
-  userId: string;
+  userId?: string; // <<-- ALTERAÇÃO 1: 'userId' agora é opcional
   withUnreadMessages?: string;
   queueIds: number[];
   tags: number[];
@@ -41,14 +43,18 @@ const ListTicketsServiceKanban = async ({
   users,
   status,
   date,
+  dateStart,
+  dateEnd,
   updatedAt,
   showAll,
   userId,
   withUnreadMessages,
   companyId
 }: Request): Promise<Response> => {
+  // <<-- ALTERAÇÃO 2: A condição inicial foi simplificada para não depender mais do 'userId'.
+  // A lógica antiga era: { [Op.or]: [{ userId }, { status: "pending" }], ... }
+  // Isso forçava a visualização a ser individual.
   let whereCondition: Filterable["where"] = {
-    [Op.or]: [{ userId }, { status: "pending" }],
     queueId: { [Op.or]: [queueIds, null] }
   };
   let includeCondition: Includeable[];
@@ -57,7 +63,7 @@ const ListTicketsServiceKanban = async ({
     {
       model: Contact,
       as: "contact",
-      attributes: ["id", "name", "number", "email"]
+      attributes: ["id", "name", "number", "email", "companyId", "urlPicture"]
     },
     {
       model: Queue,
@@ -133,10 +139,10 @@ const ListTicketsServiceKanban = async ({
     };
   }
 
-  if (date) {
+  if (dateStart && dateEnd) {
     whereCondition = {
       createdAt: {
-        [Op.between]: [+startOfDay(parseISO(date)), +endOfDay(parseISO(date))]
+        [Op.between]: [+startOfDay(parseISO(dateStart)), +endOfDay(parseISO(dateEnd))]
       }
     };
   }
@@ -152,8 +158,11 @@ const ListTicketsServiceKanban = async ({
     };
   }
 
-  if (withUnreadMessages === "true") {
-    const user = await ShowUserService(userId);
+  // <<-- ALTERAÇÃO 3: Adicionada verificação 'if (userId && ...)'
+  // Este bloco de código é específico para um usuário e quebraria o sistema
+  // se executado sem um 'userId'. Agora ele só roda se o 'userId' for fornecido.
+  if (userId && withUnreadMessages === "true") {
+    const user = await ShowUserService(userId, companyId);
     const userQueueIds = user.queues.map(queue => queue.id);
 
     whereCondition = {
@@ -205,7 +214,7 @@ const ListTicketsServiceKanban = async ({
     };
   }
 
-  const limit = 40;
+  const limit = 400;
   const offset = limit * (+pageNumber - 1);
 
   whereCondition = {

@@ -6,67 +6,68 @@ import {
   Button,
   Typography,
   CircularProgress,
+  Paper,
 } from "@material-ui/core";
 import { Formik, Form } from "formik";
-
 import AddressForm from "./Forms/AddressForm";
 import PaymentForm from "./Forms/PaymentForm";
 import ReviewOrder from "./ReviewOrder";
 import CheckoutSuccess from "./CheckoutSuccess";
-
 import api from "../../services/api";
 import toastError from "../../errors/toastError";
 import { toast } from "react-toastify";
 import { AuthContext } from "../../context/Auth/AuthContext";
-
-
 import validationSchema from "./FormModel/validationSchema";
 import checkoutFormModel from "./FormModel/checkoutFormModel";
 import formInitialValues from "./FormModel/formInitialValues";
-
 import useStyles from "./styles";
-import Invoices from "../../pages/Financeiro";
-
 
 export default function CheckoutPage(props) {
   const steps = ["Dados", "Personalizar", "Revisar"];
   const { formId, formField } = checkoutFormModel;
-  
-  
-  
+
   const classes = useStyles();
   const [activeStep, setActiveStep] = useState(1);
   const [datePayment, setDatePayment] = useState(null);
-  const [invoiceId, setinvoiceId] = useState(props.Invoice.id);
-  const currentValidationSchema = validationSchema[activeStep];
-  const isLastStep = activeStep === steps.length - 1;
+  const [invoiceId] = useState(props.Invoice.id);
+  const [paymentText, setPaymentText] = useState("");
   const { user } = useContext(AuthContext);
 
-function _renderStepContent(step, setFieldValue, setActiveStep, values ) {
+  const currentValidationSchema = validationSchema[activeStep];
+  const isLastStep = activeStep === steps.length - 1;
 
-  switch (step) {
-    case 0:
-      return <AddressForm formField={formField} values={values} setFieldValue={setFieldValue}  />;
-    case 1:
-      return <PaymentForm 
-      formField={formField} 
-      setFieldValue={setFieldValue} 
-      setActiveStep={setActiveStep} 
-      activeStep={step} 
-      invoiceId={invoiceId}
-      values={values}
-      />;
-    case 2:
-      return <ReviewOrder />;
-    default:
-      return <div>Not Found</div>;
+  function _renderStepContent(step, setFieldValue, setActiveStep, values) {
+    switch (step) {
+      case 0:
+        return (
+          <AddressForm
+            formField={formField}
+            values={values}
+            setFieldValue={setFieldValue}
+          />
+        );
+      case 1:
+        return (
+          <PaymentForm
+            formField={formField}
+            setFieldValue={setFieldValue}
+            setActiveStep={setActiveStep}
+            activeStep={step}
+            invoiceId={invoiceId}
+            values={values}
+          />
+        );
+      case 2:
+        return <ReviewOrder />;
+      default:
+        return <div>Not Found</div>;
+    }
   }
-}
-
 
   async function _submitForm(values, actions) {
     try {
       const plan = JSON.parse(values.plan);
+
       const newValues = {
         firstName: values.firstName,
         lastName: values.lastName,
@@ -83,15 +84,19 @@ function _renderStepContent(step, setFieldValue, setActiveStep, values ) {
         price: plan.price,
         users: plan.users,
         connections: plan.connections,
-        invoiceId: invoiceId
-      }
+        invoiceId: invoiceId,
+      };
 
       const { data } = await api.post("/subscription", newValues);
-      setDatePayment(data)
-      actions.setSubmitting(false);
-      setActiveStep(activeStep + 1);
-      toast.success("Assinatura realizada com sucesso!, aguardando a realização do pagamento");
+      setDatePayment(data);
+      setPaymentText("Ao realizar o pagamento, atualize a página!");
+      window.open(data.urlMcPg, "_blank");
+      actions.setSubmitting(true);
+      toast.success(
+        "Assinatura criada com sucesso! Aguardando confirmação do pagamento."
+      );
     } catch (err) {
+      actions.setSubmitting(false);
       toastError(err);
     }
   }
@@ -112,63 +117,156 @@ function _renderStepContent(step, setFieldValue, setActiveStep, values ) {
 
   return (
     <React.Fragment>
-      <Typography component="h1" variant="h4" align="center">
-        Falta pouco!
-      </Typography>
-      <Stepper activeStep={activeStep} className={classes.stepper}>
-        {steps.map((label) => (
-          <Step key={label}>
-            <StepLabel>{label}</StepLabel>
-          </Step>
-        ))}
-      </Stepper>
-      <React.Fragment>
+      <Paper
+        elevation={3}
+        style={{
+          padding: 30,
+          borderRadius: 16,
+          maxWidth: 900,
+          margin: "30px auto",
+          background: "#fafafa",
+        }}
+      >
+        <Typography
+          component="h1"
+          variant="h4"
+          align="center"
+          style={{
+            fontWeight: 700,
+            marginBottom: 20,
+            letterSpacing: "-.5px",
+          }}
+        >
+          Falta pouquinho para finalizar!
+        </Typography>
+
+        <Stepper
+          activeStep={activeStep}
+          className={classes.stepper}
+          style={{
+            padding: "20px 0 40px",
+          }}
+        >
+          {steps.map((label) => (
+            <Step key={label}>
+              <StepLabel
+                StepIconProps={{
+                  style: {
+                    color:
+                      activeStep === steps.indexOf(label)
+                        ? "#1976d2"
+                        : "#999999",
+                  },
+                }}
+              >
+                <Typography style={{ fontWeight: 600 }}>{label}</Typography>
+              </StepLabel>
+            </Step>
+          ))}
+        </Stepper>
+
         {activeStep === steps.length ? (
           <CheckoutSuccess pix={datePayment} />
         ) : (
           <Formik
             initialValues={{
-              ...user, 
-              ...formInitialValues
+              ...user,
+              ...formInitialValues,
             }}
             validationSchema={currentValidationSchema}
             onSubmit={_handleSubmit}
           >
             {({ isSubmitting, setFieldValue, values }) => (
               <Form id={formId}>
-                {_renderStepContent(activeStep, setFieldValue, setActiveStep, values)}
+                {_renderStepContent(
+                  activeStep,
+                  setFieldValue,
+                  setActiveStep,
+                  values
+                )}
 
-                <div className={classes.buttons}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    marginTop: 30,
+                  }}
+                >
                   {activeStep !== 1 && (
-                    <Button onClick={_handleBack} className={classes.button}>
+                    <Button
+                      onClick={_handleBack}
+                      className={classes.button}
+                      style={{
+                        padding: "8px 30px",
+                        borderRadius: 10,
+                        fontWeight: 600,
+                      }}
+                    >
                       VOLTAR
                     </Button>
                   )}
-                  <div className={classes.wrapper}>
+
+                  <div style={{ position: "relative" }}>
                     {activeStep !== 1 && (
                       <Button
                         disabled={isSubmitting}
                         type="submit"
                         variant="contained"
                         color="primary"
-                        className={classes.button}
+                        style={{
+                          padding: "10px 40px",
+                          borderRadius: 12,
+                          fontWeight: "bold",
+                          boxShadow: "0px 3px 12px rgba(25,118,210,.3)",
+                        }}
                       >
                         {isLastStep ? "PAGAR" : "PRÓXIMO"}
                       </Button>
                     )}
+
                     {isSubmitting && (
                       <CircularProgress
-                        size={24}
-                        className={classes.buttonProgress}
+                        size={26}
+                        style={{
+                          position: "absolute",
+                          top: "50%",
+                          left: "50%",
+                          marginTop: -13,
+                          marginLeft: -13,
+                        }}
                       />
                     )}
                   </div>
                 </div>
+
+                {paymentText && (
+                  <Paper
+                    elevation={0}
+                    style={{
+                      backgroundColor: "#fff3e0",
+                      padding: "12px 20px",
+                      borderRadius: 12,
+                      marginTop: 20,
+                      border: "1px solid #ffe0b2",
+                    }}
+                  >
+                    <Typography
+                      variant="h6"
+                      align="center"
+                      style={{
+                        color: "#ef6c00",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {paymentText}
+                    </Typography>
+                  </Paper>
+                )}
               </Form>
             )}
           </Formik>
         )}
-      </React.Fragment>
+      </Paper>
     </React.Fragment>
   );
 }

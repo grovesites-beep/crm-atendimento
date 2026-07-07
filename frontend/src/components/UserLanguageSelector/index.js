@@ -1,8 +1,6 @@
 import React, { useContext, useState } from "react";
-
-import { Button, Menu, MenuItem } from "@material-ui/core";
-import TranslateIcon from "@material-ui/icons/Translate";
-import ExpandMoreIcon from "@material-ui/icons/ExpandMore";
+import { Button, Menu, MenuItem, Tooltip } from "@material-ui/core"; 
+import { Languages } from "lucide-react";
 
 import { i18n } from "../../translate/i18n";
 import { AuthContext } from "../../context/Auth/AuthContext";
@@ -35,16 +33,17 @@ const UserLanguageSelector = () => {
 
     return (
         <>
-            <Button
-                color="inherit"
-                onClick={handleOpenLanguageMenu}
-                startIcon={<TranslateIcon />}
-                endIcon={<ExpandMoreIcon />}
-            >
-                {user.language
-                    ? i18n.t(`languages.${user.language}`)
-                    : i18n.t(`languages.${user.undefined}`)}
-            </Button>
+            {/* 2. Adicione um Tooltip para indicar a função do ícone */}
+            <Tooltip title="" arrow>
+         <Button
+        color="inherit"
+        onClick={handleOpenLanguageMenu}
+        style={{ color: 'white' }}
+    >
+        <Languages />
+          </Button>
+           </Tooltip>
+
             <Menu
                 anchorEl={langueMenuAnchorEl}
                 keepMounted
@@ -60,9 +59,9 @@ const UserLanguageSelector = () => {
                 <MenuItem onClick={() => handleChangeLanguage("es")}>
                     {i18n.t("languages.es")}
                 </MenuItem>
-                <MenuItem onClick={() => handleChangeLanguage("tr")}>
-                    {i18n.t("languages.tr")}
-                </MenuItem>
+                 <MenuItem onClick={() => handleChangeLanguage("tr")}>
+                     {i18n.t("languages.tr")}
+                 </MenuItem>
             </Menu>
         </>
     );

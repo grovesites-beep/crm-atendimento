@@ -10,7 +10,11 @@
     "emitDecoratorMetadata": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-	"types": ["node"]
+
+    // >>> ADIÇÕES IMPORTANTES <<<
+    "moduleResolution": "node",
+    "typeRoots": ["./node_modules/@types", "./src/@types"]
   },
-    "exclude": ["public"]
+  "include": ["src/**/*.ts", "src/**/*.d.ts"],
+  "exclude": ["public", "dist"]
 }

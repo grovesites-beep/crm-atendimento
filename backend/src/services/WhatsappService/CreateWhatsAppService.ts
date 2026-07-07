@@ -5,6 +5,7 @@ import Whatsapp from "../../models/Whatsapp";
 import Company from "../../models/Company";
 import Plan from "../../models/Plan";
 import AssociateWhatsappQueue from "./AssociateWhatsappQueue";
+import Baileys from "../../models/Baileys"; // ❗️ 1. IMPORTAR O MODEL BAILEYS
 
 interface Request {
   name: string;
@@ -18,15 +19,38 @@ interface Request {
   isDefault?: boolean;
   token?: string;
   provider?: string;
-  //sendIdQueue?: number;
-  //timeSendQueue?: number;
-  transferQueueId?: number;
-  timeToTransfer?: number;    
-  promptId?: number;
-  maxUseBotQueues?: number;
-  timeUseBotQueues?: number;
+  facebookUserId?: string;
+  facebookUserToken?: string;
+  tokenMeta?: string;
+  channel?: string;
+  facebookPageUserId?: string;
+  maxUseBotQueues?: string;
+  timeUseBotQueues?: string;
   expiresTicket?: number;
+  allowGroup?: boolean;
+  sendIdQueue?: number;
+  timeSendQueue?: number;
+  timeInactiveMessage?: string;
+  inactiveMessage?: string;
+  maxUseBotQueuesNPS?: number;
+  expiresTicketNPS?: number;
+  whenExpiresTicket?: string;
   expiresInactiveMessage?: string;
+  groupAsTicket?: string;
+  importOldMessages?: string;
+  importRecentMessages?: string;
+  importOldMessagesGroups?: boolean;
+  closedTicketsPostImported?: boolean;
+  timeCreateNewTicket?: number;
+  integrationId?: number;
+  schedules?: any[];
+  promptId?: number;
+  collectiveVacationMessage?: string;
+  collectiveVacationStart?: string;
+  collectiveVacationEnd?: string;
+  queueIdImportMessages?: number;
+  flowIdNotPhrase?: number;
+  flowIdWelcome?: number;
 }
 
 interface Response {
@@ -41,20 +65,43 @@ const CreateWhatsAppService = async ({
   greetingMessage,
   complationMessage,
   outOfHoursMessage,
-  ratingMessage,
   isDefault = false,
   companyId,
   token = "",
   provider = "beta",
-  //timeSendQueue,
-  //sendIdQueue,
-  transferQueueId,
-  timeToTransfer,    
+  facebookUserId,
+  facebookUserToken,
+  facebookPageUserId,
+  tokenMeta,
+  channel = "whatsapp",
+  maxUseBotQueues,
+  timeUseBotQueues,
+  expiresTicket,
+  allowGroup = false,
+  timeSendQueue,
+  sendIdQueue,
+  timeInactiveMessage,
+  inactiveMessage,
+  ratingMessage,
+  maxUseBotQueuesNPS,
+  expiresTicketNPS,
+  whenExpiresTicket,
+  expiresInactiveMessage,
+  groupAsTicket,
+  importOldMessages,
+  importRecentMessages,
+  closedTicketsPostImported,
+  importOldMessagesGroups,
+  timeCreateNewTicket,
+  integrationId,
+  schedules,
   promptId,
-  maxUseBotQueues = 3,
-  timeUseBotQueues = 0,
-  expiresTicket = 0,
-  expiresInactiveMessage = ""
+  collectiveVacationEnd,
+  collectiveVacationMessage,
+  collectiveVacationStart,
+  queueIdImportMessages,
+  flowIdNotPhrase,
+  flowIdWelcome
 }: Request): Promise<Response> => {
   const company = await Company.findOne({
     where: {
@@ -66,7 +113,8 @@ const CreateWhatsAppService = async ({
   if (company !== null) {
     const whatsappCount = await Whatsapp.count({
       where: {
-        companyId
+        companyId,
+        channel: channel
       }
     });
 
@@ -87,7 +135,7 @@ const CreateWhatsAppService = async ({
         async value => {
           if (!value) return false;
           const nameExists = await Whatsapp.findOne({
-            where: { name: value }
+            where: { name: value, channel: channel, companyId }
           });
           return !nameExists;
         }
@@ -103,13 +151,13 @@ const CreateWhatsAppService = async ({
 
   const whatsappFound = await Whatsapp.findOne({ where: { companyId } });
 
-  isDefault = !whatsappFound;
+  isDefault = channel === "whatsapp" ? !whatsappFound : false;
 
   let oldDefaultWhatsapp: Whatsapp | null = null;
 
-  if (isDefault) {
+  if (channel === "whatsapp" && isDefault) {
     oldDefaultWhatsapp = await Whatsapp.findOne({
-      where: { isDefault: true, companyId }
+      where: { isDefault: true, companyId, channel: channel }
     });
     if (oldDefaultWhatsapp) {
       await oldDefaultWhatsapp.update({ isDefault: false, companyId });
@@ -131,7 +179,7 @@ const CreateWhatsAppService = async ({
           async value => {
             if (!value) return false;
             const tokenExists = await Whatsapp.findOne({
-              where: { token: value }
+              where: { token: value, channel: channel }
             });
             return !tokenExists;
           }
@@ -157,18 +205,50 @@ const CreateWhatsAppService = async ({
       companyId,
       token,
       provider,
-      //timeSendQueue,
-      //sendIdQueue,
-	  transferQueueId,
-	  timeToTransfer,	  
-      promptId,
+      channel,
+      facebookUserId,
+      facebookUserToken,
+      facebookPageUserId,
+      tokenMeta,
       maxUseBotQueues,
       timeUseBotQueues,
       expiresTicket,
-      expiresInactiveMessage
+      allowGroup,
+      timeSendQueue,
+      sendIdQueue,
+      timeInactiveMessage,
+      inactiveMessage,
+      maxUseBotQueuesNPS,
+      expiresTicketNPS,
+      whenExpiresTicket,
+      expiresInactiveMessage,
+      groupAsTicket,
+      importOldMessages,
+      importRecentMessages,
+      closedTicketsPostImported,
+      importOldMessagesGroups,
+      timeCreateNewTicket,
+      integrationId,
+      schedules,
+      promptId,
+      collectiveVacationEnd,
+      collectiveVacationMessage,
+      collectiveVacationStart,
+      queueIdImportMessages,
+      flowIdNotPhrase,
+      flowIdWelcome
     },
     { include: ["queues"] }
   );
+
+  // ❗️ 2. INÍCIO DA CORREÇÃO
+  // Garantir que o registro Baileys seja criado JUNTO com o Whatsapp
+  // Isso impede o erro 'ERR_NO_BAILEYS_DATA_FOUND' em reconexões futuras.
+  await Baileys.create({
+    whatsappId: whatsapp.id,
+    companyId: whatsapp.companyId
+  });
+  // ❗️ 2. FIM DA CORREÇÃO
 
   await AssociateWhatsappQueue(whatsapp, queueIds);
 

@@ -1,62 +1,58 @@
+import 'dotenv/config';
 import gracefulShutdown from "http-graceful-shutdown";
 import app from "./app";
 import { initIO } from "./libs/socket";
-import { logger } from "./utils/logger";
-import { StartAllWhatsAppsSessions } from "./services/WbotServices/StartAllWhatsAppsSessions";
-import Company from "./models/Company";
+import logger from "./utils/logger";
+import Whatsapp from "./models/Whatsapp";
+import BullQueue from './libs/queue';
 import { startQueueProcess } from "./queues";
-import { TransferTicketQueue } from "./wbotTransferTicketQueue";
-import cron from "node-cron";
+import { StartWhatsAppSession } from "./services/WbotServices/StartWhatsAppSession";
 
-const server = app.listen(process.env.PORT, async () => {
+const PORT = Number(process.env.PORT) || 8080;
+const HOST = process.env.HOST || "0.0.0.0";
+
+const server = app.listen(PORT, HOST, async () => {
   try {
-    const companies = await Company.findAll();
-    const sessionPromises = [];
+    // 1. Busca no banco todas as conexões que deveriam estar ativas
+    const whatsapps = await Whatsapp.findAll({
+      where: { status: "CONNECTED" }
+    });
 
-    for (const c of companies) {
-      sessionPromises.push(StartAllWhatsAppsSessions(c.id));
+    logger.info(
+      `✅ Servidor iniciado. Tentando reconectar ${whatsapps.length} sessões.`
+    );
+
+    // 2. Tenta iniciar cada uma delas
+    if (whatsapps.length > 0) {
+      for (const wpp of whatsapps) {
+        // Adiciona um pequeno atraso para não sobrecarregar a API do WhatsApp
+        await new Promise(r => setTimeout(r, 1000));
+        logger.info(`Tentando reconectar: ${wpp.name}`);
+        StartWhatsAppSession(wpp, wpp.companyId);
+      }
     }
 
-    await Promise.all(sessionPromises);
-    startQueueProcess();
-    logger.info(`Server started on port: ${process.env.PORT}`);
-  } catch (error) {
-    logger.error("Error starting server:", error);
-    process.exit(1);
+    // 3. Inicia as filas (como já fazia)
+    await startQueueProcess();
+  } catch (err) {
+    logger.error("Erro no startup do servidor", err);
   }
+
+  if (process.env.REDIS_URI_ACK && process.env.REDIS_URI_ACK !== "") {
+    BullQueue.process();
+  }
+
+  logger.info(`Server started on ${HOST}:${PORT}`);
 });
 
 process.on("uncaughtException", err => {
-  logger.error(`${new Date().toUTCString()} uncaughtException:`, err.message);
-  logger.error(err.stack);
-  // Remove process.exit(1); to avoid abrupt shutdowns
+  console.error(`${new Date().toUTCString()} uncaughtException:`, err.message);
+  console.error(err.stack);
 });
 
 process.on("unhandledRejection", (reason, p) => {
-  logger.error(`${new Date().toUTCString()} unhandledRejection:`, reason, p);
-  // Remove process.exit(1); to avoid abrupt shutdowns
-});
-
-cron.schedule("* * * * *", async () => {
-  try {
-    logger.info(`Serviço de transferência de tickets iniciado`);
-    await TransferTicketQueue();
-  } catch (error) {
-    logger.error("Error in cron job:", error);
-  }
+  console.error(`${new Date().toUTCString()} unhandledRejection:`, reason, p);
 });
 
 initIO(server);
-
-// Configure graceful shutdown to handle all outstanding promises
-gracefulShutdown(server, {
-  signals: "SIGINT SIGTERM",
-  timeout: 30000, // 30 seconds
-  onShutdown: async () => {
-    logger.info("Gracefully shutting down...");
-    // Add any other cleanup code here, if necessary
-  },
-  finally: () => {
-    logger.info("Server shutdown complete.");
-  }
-});
+gracefulShutdown(server);

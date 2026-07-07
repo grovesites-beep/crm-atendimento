@@ -1,235 +1,385 @@
-import React, { useState, useEffect } from "react";
-import qs from 'query-string'
-
-import * as Yup from "yup";
-import { useHistory } from "react-router-dom";
-import { Link as RouterLink } from "react-router-dom";
+import React, { useState, useEffect, useReducer, useContext } from "react";
 import { toast } from "react-toastify";
-import { Formik, Form, Field } from "formik";
-import usePlans from "../../hooks/usePlans";
-import Avatar from "@material-ui/core/Avatar";
-import Button from "@material-ui/core/Button";
-import CssBaseline from "@material-ui/core/CssBaseline";
-import TextField from "@material-ui/core/TextField";
-import Link from "@material-ui/core/Link";
-import Grid from "@material-ui/core/Grid";
-import Box from "@material-ui/core/Box";
-import InputMask from 'react-input-mask';
-import {
-	FormControl,
-	InputLabel,
-	MenuItem,
-	Select,
-} from "@material-ui/core";
-import LockOutlinedIcon from "@material-ui/icons/LockOutlined";
-import Typography from "@material-ui/core/Typography";
-import { makeStyles } from "@material-ui/core/styles";
-import Container from "@material-ui/core/Container";
-import { i18n } from "../../translate/i18n";
+import { useHistory } from "react-router-dom";
+// import { SocketContext } from "../../context/Socket/SocketContext"; //
 
-import { openApi } from "../../services/api";
-import toastError from "../../errors/toastError";
-import moment from "moment";
+import { makeStyles } from "@material-ui/core/styles"; //
+import Paper from "@material-ui/core/Paper"; //
+import Button from "@material-ui/core/Button"; //
+import Table from "@material-ui/core/Table"; //
+import TableBody from "@material-ui/core/TableBody"; //
+import TableCell from "@material-ui/core/TableCell"; //
+import TableHead from "@material-ui/core/TableHead"; //
+import TableRow from "@material-ui/core/TableRow"; //
+import IconButton from "@material-ui/core/IconButton"; // Adicionado para os botões de ação na tabela
+import TextField from "@material-ui/core/TextField"; // Adicionado para o campo de busca
+import InputAdornment from "@material-ui/core/InputAdornment"; // Adicionado para o ícone de busca
 
+import SearchIcon from "@material-ui/icons/Search"; // Adicionado para o ícone de busca
+import EditIcon from "@material-ui/icons/Edit"; // Adicionado para o ícone de editar
+import DeleteOutlineIcon from "@material-ui/icons/DeleteOutline"; // Adicionado para o ícone de deletar
 
-const logo = `${process.env.REACT_APP_BACKEND_URL}/public/logotipos/login.png`;
-const useStyles = makeStyles(theme => ({
-	paper: {
-		marginTop: theme.spacing(8),
-		display: "flex",
-		flexDirection: "column",
-		alignItems: "center",
-	},
-	avatar: {
-		margin: theme.spacing(1),
-		backgroundColor: theme.palette.secondary.main,
-	},
-	form: {
-		width: "100%",
-		marginTop: theme.spacing(3),
-	},
-	submit: {
-		margin: theme.spacing(3, 0, 2),
-	},
-}));
+import MainContainer from "../../components/MainContainer"; //
+import MainHeader from "../../components/MainHeader"; //
+import MainHeaderButtonsWrapper from "../../components/MainHeaderButtonsWrapper"; // Adicionado, presumindo que é um componente que você tem
 
-const UserSchema = Yup.object().shape({
-	name: Yup.string()
-		.min(2, "Too Short!")
-		.max(50, "Too Long!")
-		.required("Required"),
-	password: Yup.string().min(5, "Too Short!").max(50, "Too Long!"),
-	email: Yup.string().email("Invalid email").required("Required"),
-});
+import Title from "../../components/Title"; //
 
-const SignUp = () => {
-	const classes = useStyles();
-	const history = useHistory();
-	let companyId = null
+import api from "../../services/api"; //
+import { i18n } from "../../translate/i18n"; //
+import TableRowSkeleton from "../../components/TableRowSkeleton"; //
+import CompanyModal from "../../components/CompaniesModal"; //
+import ConfirmationModal from "../../components/ConfirmationModal"; //
+import toastError from "../../errors/toastError"; //
+import { AuthContext } from "../../context/Auth/AuthContext"; //
+import { useDate } from "../../hooks/useDate"; //
+import usePlans from "../../hooks/usePlans"; // // Importação mantida, mesmo que não usada diretamente
+import moment from "moment"; //
 
-	const params = qs.parse(window.location.search)
-	if (params.companyId !== undefined) {
-		companyId = params.companyId
-	}
+// === FLAG para exibir/ocultar o botão "ADICIONAR EMPRESA"
+const SHOW_ADD_COMPANY_BUTTON = false;
 
-	const initialState = { name: "", email: "", phone: "", password: "", planId: "", };
+const reducer = (state, action) => {
+    if (action.type === "LOAD_COMPANIES") {
+        const companies = action.payload; //
+        const newCompanies = []; //
 
-	const [user] = useState(initialState);
-	const dueDate = moment().add(3, "day").format();
-	const handleSignUp = async values => {
-		Object.assign(values, { recurrence: "MENSAL" });
-		Object.assign(values, { dueDate: dueDate });
-		Object.assign(values, { status: "t" });
-		Object.assign(values, { campaignsEnabled: true });
-		try {
-			await openApi.post("/companies/cadastro", values);
-			toast.success(i18n.t("signup.toasts.success"));
-			history.push("/login");
-		} catch (err) {
-			console.log(err);
-			toastError(err);
-		}
-	};
+        companies.forEach((company) => { //
+            const companyIndex = state.findIndex((u) => u.id === company.id); //
+            if (companyIndex !== -1) { //
+                state[companyIndex] = company; //
+            } else { //
+                newCompanies.push(company); //
+            }
+        });
 
-	const [plans, setPlans] = useState([]);
-	const { list: listPlans } = usePlans();
+        return [...state, ...newCompanies]; //
+    }
 
-	useEffect(() => {
-		async function fetchData() {
-			const list = await listPlans();
-			setPlans(list);
-		}
-		fetchData();
-	}, []);
+    if (action.type === "UPDATE_COMPANIES") {
+        const company = action.payload; //
+        const companyIndex = state.findIndex((u) => u.id === company.id); //
 
+        if (companyIndex !== -1) { //
+            state[companyIndex] = company; //
+            return [...state]; //
+        } else { //
+            return [company, ...state]; //
+        }
+    }
 
-	return (
-		<Container component="main" maxWidth="xs">
-			<CssBaseline />
-			<div className={classes.paper}>
-				<div>
-					<img style={{ margin: "0 auto", height: "80px", width: "100%" }} src={logo} alt="Whats" />
-				</div>
-				{/*<Typography component="h1" variant="h5">
-					{i18n.t("signup.title")}
-				</Typography>*/}
-				{/* <form className={classes.form} noValidate onSubmit={handleSignUp}> */}
-				<Formik
-					initialValues={user}
-					enableReinitialize={true}
-					validationSchema={UserSchema}
-					onSubmit={(values, actions) => {
-						setTimeout(() => {
-							handleSignUp(values);
-							actions.setSubmitting(false);
-						}, 400);
-					}}
-				>
-					{({ touched, errors, isSubmitting }) => (
-						<Form className={classes.form}>
-							<Grid container spacing={2}>
-								<Grid item xs={12}>
-									<Field
-										as={TextField}
-										autoComplete="name"
-										name="name"
-										error={touched.name && Boolean(errors.name)}
-										helperText={touched.name && errors.name}
-										variant="outlined"
-										fullWidth
-										id="name"
-										label="Nome da Empresa"
-									/>
-								</Grid>
+    if (action.type === "DELETE_COMPANIES") {
+        const companyId = action.payload; //
 
-								<Grid item xs={12}>
-									<Field
-										as={TextField}
-										variant="outlined"
-										fullWidth
-										id="email"
-										label={i18n.t("signup.form.email")}
-										name="email"
-										error={touched.email && Boolean(errors.email)}
-										helperText={touched.email && errors.email}
-										autoComplete="email"
-										required
-									/>
-								</Grid>
-								
-							<Grid item xs={12}>
-								<Field
-									as={InputMask}
-									mask="(99) 99999-9999"
-									variant="outlined"
-									fullWidth
-									id="phone"
-									name="phone"
-									error={touched.phone && Boolean(errors.phone)}
-									helperText={touched.phone && errors.phone}
-									autoComplete="phone"
-									required
-								>
-									{({ field }) => (
-										<TextField
-											{...field}
-											variant="outlined"
-											fullWidth
-											label="DDD988888888"
-											inputProps={{ maxLength: 11 }} // Definindo o limite de caracteres
-										/>
-									)}
-								</Field>
-							</Grid>
-								<Grid item xs={12}>
-									<Field
-										as={TextField}
-										variant="outlined"
-										fullWidth
-										name="password"
-										error={touched.password && Boolean(errors.password)}
-										helperText={touched.password && errors.password}
-										label={i18n.t("signup.form.password")}
-										type="password"
-										id="password"
-										autoComplete="current-password"
-										required
-									/>
-								</Grid>
-								<Grid item xs={12}>
-									<InputLabel htmlFor="plan-selection">Plano</InputLabel>
-									<Field
-										as={Select}
-										variant="outlined"
-										fullWidth
-										id="plan-selection"
-										label="Plano"
-										name="planId"
-										required
-									>
-										{plans.map((plan, key) => (
-											<MenuItem key={key} value={plan.id}>
-												{plan.name} - Atendentes: {plan.users} - WhatsApp: {plan.connections} - Filas: {plan.queues} - R$ {plan.value}
-											</MenuItem>
-										))}
-									</Field>
-								</Grid>
-							</Grid>
-							<Button
-								type="submit"
-								fullWidth
-								variant="contained"
-								color="primary"
-								className={classes.submit}
-							>
-								{i18n.t("signup.buttons.submit")}
-							</Button>
-						</Form>
-					)}
-				</Formik>
-			</div>
-		</Container>
-	);
+        const companyIndex = state.findIndex((u) => u.id === companyId); //
+        if (companyIndex !== -1) { //
+            state.splice(companyIndex, 1); //
+        }
+        return [...state]; //
+    }
+
+    if (action.type === "RESET") {
+        return []; //
+    }
+    return state; // Retorne o estado atual se a ação não for reconhecida, para evitar undefined.
 };
 
-export default SignUp;
+const useStyles = makeStyles((theme) => ({
+    mainPaper: {
+        flex: 1, //
+        padding: theme.spacing(1), //
+        overflowY: "scroll", //
+        ...theme.scrollbarStyles, //
+    },
+}));
+
+const Companies = () => {
+    const classes = useStyles(); //
+    const history = useHistory(); //
+
+    const [loading, setLoading] = useState(false); //
+    const [pageNumber, setPageNumber] = useState(1); //
+    const [hasMore, setHasMore] = useState(false); //
+    const [selectedCompany, setSelectedCompany] = useState(null); //
+    const [deletingCompany, setDeletingCompany] = useState(null); //
+    const [companyModalOpen, setCompanyModalOpen] = useState(false); //
+    const [confirmModalOpen, setConfirmModalOpen] = useState(false); //
+    const [searchParam, setSearchParam] = useState(""); //
+    const [companies, dispatch] = useReducer(reducer, []); //
+    const { dateToClient, datetimeToClient } = useDate(); //
+
+    // const { getPlanCompany } = usePlans(); //
+    //   const socketManager = useContext(SocketContext); //
+    const { user, socket } = useContext(AuthContext); //
+
+
+    useEffect(() => {
+        async function fetchData() {
+            if (!user.super) { //
+                toast.error("Esta empresa não possui permissão para acessar essa página! Estamos lhe redirecionando."); //
+                setTimeout(() => { //
+                    history.push(`/`) //
+                }, 1000); //
+            }
+        }
+        fetchData(); //
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); //
+
+    useEffect(() => {
+        dispatch({ type: "RESET" }); //
+        setPageNumber(1); //
+    }, [searchParam]); //
+
+    useEffect(() => {
+        setLoading(true); //
+        const delayDebounceFn = setTimeout(() => { //
+            const fetchCompanies = async () => {
+                try {
+                    const { data } = await api.get("/companiesPlan/", { //
+                        params: { searchParam, pageNumber }, //
+                    });
+                    dispatch({ type: "LOAD_COMPANIES", payload: data.companies }); //
+                    setHasMore(data.hasMore); //
+                    setLoading(false); //
+                } catch (err) {
+                    toastError(err); //
+                }
+            };
+            fetchCompanies(); //
+        }, 500); //
+        return () => clearTimeout(delayDebounceFn); //
+    }, [searchParam, pageNumber]); //
+
+    // // Evento de socket para atualização de empresas
+    // useEffect(() => {
+    //     if (socket) {
+    //         socket.on("company", (data) => {
+    //             if (data.action === "update" || data.action === "create") {
+    //                 dispatch({ type: "UPDATE_COMPANIES", payload: data.company });
+    //             } else if (data.action === "delete") {
+    //                 dispatch({ type: "DELETE_COMPANIES", payload: data.companyId });
+    //             }
+    //         });
+    //     }
+    //     return () => {
+    //         if (socket) {
+    //             socket.off("company");
+    //         }
+    //     };
+    // }, [socket]);
+
+
+    const handleOpenCompanyModal = () => {
+        setSelectedCompany(null); //
+        setCompanyModalOpen(true); //
+    };
+
+    const handleCloseCompanyModal = () => {
+        setSelectedCompany(null); //
+        setCompanyModalOpen(false); //
+    };
+
+    const handleSearch = (event) => {
+        setSearchParam(event.target.value.toLowerCase()); //
+    };
+
+    const handleEditCompany = (company) => {
+        setSelectedCompany(company); //
+        setCompanyModalOpen(true); //
+    };
+
+    const handleDeleteCompany = async (companyId) => {
+        try {
+            await api.delete(`/companies/${companyId}`); //
+            toast.success(i18n.t("compaies.toasts.deleted")); //
+        } catch (err) {
+            toastError(err); //
+        }
+        setDeletingCompany(null); //
+        setSearchParam(""); // Limpa o parâmetro de busca para recarregar a lista
+        setPageNumber(1); // Redefine a página para a primeira
+    };
+
+    const loadMore = () => {
+        setPageNumber((prevState) => prevState + 1); //
+    };
+
+    const handleScroll = (e) => {
+        if (!hasMore || loading) return; //
+        const { scrollTop, scrollHeight, clientHeight } = e.currentTarget; //
+        if (scrollHeight - (scrollTop + 100) < clientHeight) { //
+            loadMore(); //
+        }
+    };
+
+    const renderStatus = (status) => { // Renomeado de 'row' para 'status' para clareza
+        return status === false ? "Não" : "Sim"; //
+    };
+
+    const renderPlanValue = (company) => { // Renomeado de 'row' para 'company' para clareza
+        return company.planId !== null && company.plan && company.plan.amount // Adicionada verificação de company.plan
+            ? company.plan.amount.toLocaleString('pt-br', { minimumFractionDigits: 2 })
+            : '00.00'; //
+    };
+
+    const renderWhatsapp = (useWhatsapp) => { // Renomeado de 'row' para 'useWhatsapp' para clareza
+        return useWhatsapp === false ? "Não" : "Sim"; //
+    };
+
+    const renderFacebook = (useFacebook) => { // Renomeado de 'row' para 'useFacebook' para clareza
+        return useFacebook === false ? "Não" : "Sim"; //
+    };
+
+    const renderInstagram = (useInstagram) => { // Renomeado de 'row' para 'useInstagram' para clareza
+        return useInstagram === false ? "Não" : "Sim"; //
+    };
+
+    const renderCampaigns = (useCampaigns) => { // Renomeado de 'row' para 'useCampaigns' para clareza
+        return useCampaigns === false ? "Não" : "Sim"; //
+    };
+
+    const renderSchedules = (useSchedules) => { // Renomeado de 'row' para 'useSchedules' para clareza
+        return useSchedules === false ? "Não" : "Sim"; //
+    };
+
+    const renderInternalChat = (useInternalChat) => { // Renomeado de 'row' para 'useInternalChat' para clareza
+        return useInternalChat === false ? "Não" : "Sim"; //
+    };
+
+    const renderExternalApi = (useExternalApi) => { // Renomeado de 'row' para 'useExternalApi' para clareza
+        return useExternalApi === false ? "Não" : "Sim"; //
+    };
+
+    const rowStyle = (record) => {
+        if (moment(record.dueDate).isValid()) { //
+            const now = moment(); //
+            const dueDate = moment(record.dueDate); //
+            const diff = dueDate.diff(now, "days"); //
+            if (diff >= 1 && diff <= 5) { //
+                return { backgroundColor: "#fffead" }; //
+            }
+            if (diff <= 0) { //
+                return { backgroundColor: "#fa8c8c" }; //
+            }
+        }
+        return {}; //
+    };
+
+    return (
+        <MainContainer>
+            <ConfirmationModal
+                title={
+                    deletingCompany &&
+                    `${i18n.t("compaies.confirmationModal.deleteTitle")} ${deletingCompany.name}?` //
+                }
+                open={confirmModalOpen} //
+                onClose={() => setConfirmModalOpen(false)} // Função para fechar o modal
+                onConfirm={() => handleDeleteCompany(deletingCompany.id)} //
+            >
+                {i18n.t("compaies.confirmationModal.deleteMessage")}
+            </ConfirmationModal>
+            <CompanyModal
+                open={companyModalOpen} //
+                onClose={handleCloseCompanyModal} //
+                aria-labelledby="form-dialog-title" //
+                companyId={selectedCompany && selectedCompany.id} //
+            />
+            <MainHeader>
+                <Title>{i18n.t("compaies.title")} ({companies.length})</Title>
+                <MainHeaderButtonsWrapper>
+                    <TextField
+                        placeholder={i18n.t("contacts.searchPlaceholder")} //
+                        type="search" //
+                        value={searchParam} //
+                        onChange={handleSearch} //
+                        InputProps={{
+                            startAdornment: (
+                                <InputAdornment position="start">
+                                    <SearchIcon style={{ color: "gray" }} />
+                                </InputAdornment>
+                            ),
+                        }}
+                    />
+                    {SHOW_ADD_COMPANY_BUTTON && (
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            onClick={handleOpenCompanyModal} //
+                        >
+                            {i18n.t("compaies.buttons.add")}
+                        </Button>
+                    )}
+                </MainHeaderButtonsWrapper>
+            </MainHeader>
+            <Paper
+                className={classes.mainPaper} //
+                variant="outlined" //
+                onScroll={handleScroll} //
+            >
+                <Table size="small">
+                    <TableHead>
+                        <TableRow>
+                            <TableCell align="center">{i18n.t("compaies.table.ID")}</TableCell>
+                            <TableCell align="center">{i18n.t("compaies.table.status")}</TableCell>
+                            <TableCell align="center">{i18n.t("compaies.table.name")}</TableCell>
+                            <TableCell align="center">{i18n.t("compaies.table.email")}</TableCell>
+                            <TableCell align="center">{i18n.t("compaies.table.namePlan")}</TableCell>
+                            <TableCell align="center">{i18n.t("compaies.table.value")}</TableCell>
+                            <TableCell align="center">{i18n.t("compaies.table.createdAt")}</TableCell>
+                            <TableCell align="center">{i18n.t("compaies.table.dueDate")}</TableCell>
+                            <TableCell align="center">{i18n.t("compaies.table.lastLogin")}</TableCell>
+                            <TableCell align="center">Tamanho da pasta</TableCell>
+                            <TableCell align="center">Total de arquivos</TableCell>
+                            <TableCell align="center">Ultimo update</TableCell>
+                            {/* Descomentado a coluna de ações */}
+                            <TableCell align="center">{i18n.t("compaies.table.actions")}</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        <>
+                            {companies.map((company) => (
+                                <TableRow style={rowStyle(company)} key={company.id}>
+                                    <TableCell align="center">{company.id}</TableCell>
+                                    <TableCell align="center">{renderStatus(company.status)}</TableCell>
+                                    <TableCell align="center">{company.name}</TableCell>
+                                    <TableCell align="center">{company.email}</TableCell>
+                                    <TableCell align="center">{company?.plan?.name}</TableCell> {/* Acesso seguro a plan.name */}
+                                    <TableCell align="center">R$ {renderPlanValue(company)}</TableCell>
+                                    <TableCell align="center">{dateToClient(company.createdAt)}</TableCell>
+                                    <TableCell align="center">{dateToClient(company.dueDate)}<br /><span>{company.recurrence}</span></TableCell>
+                                    <TableCell align="center">{datetimeToClient(company.lastLogin)}</TableCell>
+                                    <TableCell align="center">{company.folderSize}</TableCell>
+                                    <TableCell align="center">{company.numberFileFolder}</TableCell>
+                                    <TableCell align="center">{datetimeToClient(company.updatedAtFolder)}</TableCell>
+                                    {/* Descomentado os botões de ação */}
+                                    <TableCell align="center">
+                                        <IconButton
+                                            size="small"
+                                            onClick={() => handleEditCompany(company)} //
+                                        >
+                                            <EditIcon />
+                                        </IconButton>
+
+                                        <IconButton
+                                            size="small"
+                                            onClick={() => { // Modificado para não passar o evento 'e' se não for usado
+                                                setConfirmModalOpen(true); //
+                                                setDeletingCompany(company); //
+                                            }}
+                                        >
+                                            <DeleteOutlineIcon />
+                                        </IconButton>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                            {loading && <TableRowSkeleton columns={4} />}
+                        </>
+                    </TableBody>
+                </Table>
+            </Paper>
+        </MainContainer>
+    );
+};
+
+export default Companies;

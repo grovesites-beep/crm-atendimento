@@ -1,12 +1,9 @@
 import React, { useState, useRef } from "react";
-
 import Popover from "@material-ui/core/Popover";
 import IconButton from "@material-ui/core/IconButton";
 import List from "@material-ui/core/List";
 import { makeStyles } from "@material-ui/core/styles";
-import VolumeUpIcon from "@material-ui/icons/VolumeUp";
-import VolumeDownIcon from "@material-ui/icons/VolumeDown";
-
+import { Volume1, Volume2 } from "lucide-react";
 import { Grid, Slider } from "@material-ui/core";
 
 const useStyles = makeStyles((theme) => ({
@@ -60,10 +57,8 @@ const NotificationsVolume = ({ volume, setVolume }) => {
                 onClick={handleClick}
                 ref={anchorEl}
                 aria-label="Open Notifications"
-                // color="inherit"
-                // color="secondary"
             >
-                <VolumeUpIcon color="inherit" />
+                <Volume2/>
             </IconButton>
             <Popover
                 disableScrollLock
@@ -83,11 +78,11 @@ const NotificationsVolume = ({ volume, setVolume }) => {
                 <List dense className={classes.tabContainer}>
                     <Grid container spacing={2}>
                         <Grid item>
-                            <VolumeDownIcon />
+                            <Volume1 />
                         </Grid>
                         <Grid item xs>
                             <Slider
-                                value={volume}
+                                value={Number(volume)}
                                 aria-labelledby="continuous-slider"
                                 step={0.1}
                                 min={0}
@@ -98,7 +93,7 @@ const NotificationsVolume = ({ volume, setVolume }) => {
                             />
                         </Grid>
                         <Grid item>
-                            <VolumeUpIcon />
+                            <Volume2 />
                         </Grid>
                     </Grid>
                 </List>

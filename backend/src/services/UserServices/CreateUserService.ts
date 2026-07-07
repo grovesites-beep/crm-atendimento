@@ -6,15 +6,28 @@ import User from "../../models/User";
 import Plan from "../../models/Plan";
 import Company from "../../models/Company";
 
-interface Request {
+interface CreateUserRequest {
   email: string;
   password: string;
   name: string;
   queueIds?: number[];
   companyId?: number;
   profile?: string;
+  startWork?: string;
+  endWork?: string;
   whatsappId?: number;
-  allTicket?:string;
+  allTicket?: string;
+  defaultTheme?: string;
+  defaultMenu?: string;
+  allowGroup?: boolean;
+  allHistoric?: string;
+  allUserChat?: string;
+  userClosePendingTicket?: string;
+  showDashboard?: string;
+  defaultTicketsManagerWidth?: number;
+  allowRealTime?: string;
+  allowConnections?: string;
+  canViewAllContacts?: boolean; // << adicionado
 }
 
 interface Response {
@@ -31,9 +44,22 @@ const CreateUserService = async ({
   queueIds = [],
   companyId,
   profile = "admin",
+  startWork,
+  endWork,
   whatsappId,
-  allTicket
-}: Request): Promise<Response> => {
+  allTicket,
+  defaultTheme,
+  defaultMenu,
+  allowGroup,
+  allHistoric,
+  allUserChat,
+  userClosePendingTicket,
+  showDashboard,
+  defaultTicketsManagerWidth = 550,
+  allowRealTime,
+  allowConnections,
+  canViewAllContacts
+}: CreateUserRequest): Promise<Response> => {
   if (companyId !== undefined) {
     const company = await Company.findOne({
       where: {
@@ -59,6 +85,7 @@ const CreateUserService = async ({
 
   const schema = Yup.object().shape({
     name: Yup.string().required().min(2),
+    allHistoric: Yup.string(),
     email: Yup.string()
       .email()
       .required()
@@ -78,7 +105,7 @@ const CreateUserService = async ({
 
   try {
     await schema.validate({ email, password, name });
-  } catch (err) {
+  } catch (err: any) {
     throw new AppError(err.message);
   }
 
@@ -89,8 +116,21 @@ const CreateUserService = async ({
       name,
       companyId,
       profile,
+      startWork,
+      endWork,
       whatsappId: whatsappId || null,
-	  allTicket
+      allTicket,
+      defaultTheme,
+      defaultMenu,
+      allowGroup,
+      allHistoric,
+      allUserChat,
+      userClosePendingTicket,
+      showDashboard,
+      defaultTicketsManagerWidth,
+      allowRealTime,
+      allowConnections,
+      canViewAllContacts: !!canViewAllContacts // << persistência do novo campo
     },
     { include: ["queues", "company"] }
   );

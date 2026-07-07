@@ -1,3 +1,5 @@
+// ARQUIVO COMPLETO E CORRIGIDO: backend/src/services/UserServices/UpdateUserService.ts
+
 import * as Yup from "yup";
 
 import AppError from "../../errors/AppError";
@@ -12,11 +14,27 @@ interface UserData {
   profile?: string;
   companyId?: number;
   queueIds?: number[];
-  whatsappId?: number;
+  startWork?: string;
+  endWork?: string;
+  farewellMessage?: string;
+  whatsappId?: number | null;
   allTicket?: string;
+  defaultTheme?: string;
+  defaultMenu?: string;
+  allowGroup?: boolean;
+  allHistoric?: string;
+  allUserChat?: string;
+  userClosePendingTicket?: string;
+  showDashboard?: string;
+  defaultTicketsManagerWidth?: number;
+  allowRealTime?: string;
+  allowConnections?: string;
+  profileImage?: string;
+  language?: string; // Adicionado para garantir que o idioma seja atualizado
+  canViewAllContacts?: boolean;
 }
 
-interface Request {
+interface UpdateUserRequest {
   userData: UserData;
   userId: string | number;
   companyId: number;
@@ -35,46 +53,80 @@ const UpdateUserService = async ({
   userId,
   companyId,
   requestUserId
-}: Request): Promise<Response | undefined> => {
-  const user = await ShowUserService(userId);
-
-  const requestUser = await User.findByPk(requestUserId);
-
-  if (requestUser.super === false && userData.companyId !== companyId) {
-    throw new AppError("O usuário não pertence à esta empresa");
-  }
+}: UpdateUserRequest): Promise<Response | undefined> => {
+  const user = await ShowUserService(userId, companyId);
 
   const schema = Yup.object().shape({
     name: Yup.string().min(2),
     email: Yup.string().email(),
     profile: Yup.string(),
-    password: Yup.string(),
-	allTicket: Yup.string()
+    password: Yup.string()
   });
-
-  const { email, password, profile, name, queueIds = [], whatsappId, allTicket } = userData;
+  
+  const { name, email, password, profile, queueIds } = userData;
 
   try {
-    await schema.validate({ email, password, profile, name, allTicket });
+    await schema.validate({ name, email, password, profile });
   } catch (err: any) {
     throw new AppError(err.message);
   }
+  
+  // Cria um objeto para armazenar apenas os dados que serão atualizados.
+  const dataToUpdate: UserData = {};
 
-  await user.update({
-    email,
-    password,
-    profile,
-    name,
-    whatsappId: whatsappId || null,
-	allTicket
-  });
+  // Preenche o objeto apenas com os campos que foram realmente fornecidos.
+  if (userData.email) { dataToUpdate.email = userData.email; }
+  if (userData.name) { dataToUpdate.name = userData.name; }
+  if (userData.password) { dataToUpdate.password = userData.password; }
+  if (userData.profile) { dataToUpdate.profile = userData.profile; }
+  if (userData.startWork) { dataToUpdate.startWork = userData.startWork; }
+  if (userData.endWork) { dataToUpdate.endWork = userData.endWork; }
+  if (userData.farewellMessage) { dataToUpdate.farewellMessage = userData.farewellMessage; }
+  if (userData.allTicket) { dataToUpdate.allTicket = userData.allTicket; }
+  if (userData.defaultTheme) { dataToUpdate.defaultTheme = userData.defaultTheme; }
+  if (userData.defaultMenu) { dataToUpdate.defaultMenu = userData.defaultMenu; }
+  if (userData.allowGroup !== undefined) { dataToUpdate.allowGroup = userData.allowGroup; }
+  if (userData.allHistoric) { dataToUpdate.allHistoric = userData.allHistoric; }
+  if (userData.allUserChat) { dataToUpdate.allUserChat = userData.allUserChat; }
+  if (userData.userClosePendingTicket) { dataToUpdate.userClosePendingTicket = userData.userClosePendingTicket; }
+  if (userData.showDashboard) { dataToUpdate.showDashboard = userData.showDashboard; }
+  if (userData.defaultTicketsManagerWidth) { dataToUpdate.defaultTicketsManagerWidth = userData.defaultTicketsManagerWidth; }
+  if (userData.allowRealTime) { dataToUpdate.allowRealTime = userData.allowRealTime; }
+  if (userData.profileImage) { dataToUpdate.profileImage = userData.profileImage; }
+  if (userData.allowConnections) { dataToUpdate.allowConnections = userData.allowConnections; }
+  if (userData.language) { dataToUpdate.language = userData.language; }
 
-  await user.$set("queues", queueIds);
+  // Coerção booleana explícita
+  if (userData.canViewAllContacts !== undefined) {
+    dataToUpdate.canViewAllContacts = !!userData.canViewAllContacts;
+  }
+  
+  // Lógica especial para a conexão (whatsappId):
+  // Só atualiza se o campo for enviado, permitindo que seja definido como nulo.
+  if (userData.whatsappId !== undefined) {
+    dataToUpdate.whatsappId = userData.whatsappId === 0 ? null : userData.whatsappId;
+  }
+
+  await user.update(dataToUpdate);
+
+  // Lógica especial para as filas:
+  // Só atualiza as filas se o campo queueIds for enviado.
+  if (queueIds !== undefined) {
+    await user.$set("queues", queueIds);
+  }
 
   await user.reload();
 
   const company = await Company.findByPk(user.companyId);
+  const oldUserEmail = user.email;
 
+  if (company?.email === oldUserEmail) {
+    await company.update({
+      email,
+      password
+    })
+  }
+  
   const serializedUser = {
     id: user.id,
     name: user.name,
@@ -82,7 +134,25 @@ const UpdateUserService = async ({
     profile: user.profile,
     companyId: user.companyId,
     company,
-    queues: user.queues
+    queues: user.queues,
+    startWork: user.startWork,
+    endWork: user.endWork,
+    greetingMessage: user.farewellMessage,
+    allTicket: user.allTicket,
+
+    defaultMenu: user.defaultMenu,
+    defaultTheme: user.defaultTheme,
+    allowGroup: user.allowGroup,
+    allHistoric: user.allHistoric,
+    userClosePendingTicket: user.userClosePendingTicket,
+    showDashboard: user.showDashboard,
+    defaultTicketsManagerWidth: user.defaultTicketsManagerWidth,
+    allowRealTime: user.allowRealTime,
+    allowConnections: user.allowConnections,
+    profileImage: user.profileImage,
+
+    // >>> IMPORTANTE: devolver para o front persistir o estado do select
+    canViewAllContacts: !!user.canViewAllContacts
   };
 
   return serializedUser;

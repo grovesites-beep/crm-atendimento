@@ -1,17 +1,117 @@
 import React, { useEffect, useState, useContext } from "react";
 import QRCode from "qrcode.react";
 import toastError from "../../errors/toastError";
-
-import { Dialog, DialogContent, Paper, Typography, useTheme } from "@material-ui/core";
+import { makeStyles } from "@material-ui/core/styles";
+import {
+  Dialog,
+  DialogContent,
+  Paper,
+  Typography,
+  Box,
+  Grid,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  CircularProgress
+} from "@material-ui/core";
+import {
+  Smartphone,
+  MoreVert,
+  Settings,
+  Link,
+  CameraAlt
+} from "@material-ui/icons";
 import { i18n } from "../../translate/i18n";
 import api from "../../services/api";
-import { SocketContext } from "../../context/Socket/SocketContext";
+import { AuthContext } from "../../context/Auth/AuthContext";
+
+const useStyles = makeStyles((theme) => ({
+  root: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    padding: theme.spacing(3),
+  },
+  dialogPaper: {
+    borderRadius: 16,
+    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+  },
+  contentPaper: {
+    padding: theme.spacing(4),
+    borderRadius: 12,
+    textAlign: "center",
+    background: "white",
+    boxShadow: "0 10px 30px rgba(0,0,0,0.1)",
+  },
+  title: {
+    fontWeight: 700,
+    color: "#2d3748",
+    marginBottom: theme.spacing(2),
+    fontSize: "1.5rem",
+  },
+  subtitle: {
+    color: "#718096",
+    marginBottom: theme.spacing(3),
+    fontSize: "1rem",
+  },
+  qrContainer: {
+    padding: theme.spacing(2),
+    backgroundColor: "white",
+    borderRadius: 12,
+    margin: theme.spacing(2, 0),
+    border: "1px solid #e2e8f0",
+    display: "inline-block",
+  },
+  qrCode: {
+    borderRadius: 8,
+    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+  },
+  instructions: {
+    marginTop: theme.spacing(3),
+    textAlign: "left",
+  },
+  instructionList: {
+    backgroundColor: "#f7fafc",
+    borderRadius: 8,
+    padding: theme.spacing(2),
+  },
+  listItem: {
+    padding: theme.spacing(1, 0),
+  },
+  listIcon: {
+    minWidth: 40,
+    color: theme.palette.primary.main, // <-- cor seguindo o whitelabel
+  },
+  timer: {
+    marginTop: theme.spacing(2),
+    padding: theme.spacing(1, 2),
+    backgroundColor: "#edf2f7",
+    borderRadius: 20,
+    display: "inline-block",
+    fontWeight: 600,
+    color: "#4a5568",
+  },
+  loadingContainer: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: theme.spacing(2),
+    padding: theme.spacing(4),
+  },
+  brand: {
+    fontWeight: 700,
+    color: theme.palette.primary.main,
+    fontSize: "1.2rem",
+    marginBottom: theme.spacing(1),
+  },
+}));
 
 const QrcodeModal = ({ open, onClose, whatsAppId }) => {
+  const classes = useStyles();
   const [qrCode, setQrCode] = useState("");
-  const theme = useTheme();
-
-  const socketManager = useContext(SocketContext);
+  const [timeLeft, setTimeLeft] = useState(60);
+  const { user, socket } = useContext(AuthContext);
 
   useEffect(() => {
     const fetchSession = async () => {
@@ -20,6 +120,7 @@ const QrcodeModal = ({ open, onClose, whatsAppId }) => {
       try {
         const { data } = await api.get(`/whatsapp/${whatsAppId}`);
         setQrCode(data.qrcode);
+        setTimeLeft(60); // Reset timer when new QR code is fetched
       } catch (err) {
         toastError(err);
       }
@@ -28,51 +129,142 @@ const QrcodeModal = ({ open, onClose, whatsAppId }) => {
   }, [whatsAppId]);
 
   useEffect(() => {
-    if (!whatsAppId) return;
-    const companyId = localStorage.getItem("companyId");
-    const socket = socketManager.getSocket(companyId);
+    if (!qrCode) return;
 
-    socket.on(`company-${companyId}-whatsappSession`, (data) => {
+    const timer = setInterval(() => {
+      setTimeLeft((prevTime) => {
+        if (prevTime <= 1) {
+          clearInterval(timer);
+          return 60;
+        }
+        return prevTime - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [qrCode]);
+
+  useEffect(() => {
+    if (!whatsAppId) return;
+    const companyId = user.companyId;
+
+    const onWhatsappData = (data) => {
       if (data.action === "update" && data.session.id === whatsAppId) {
         setQrCode(data.session.qrcode);
+        setTimeLeft(60);
       }
 
       if (data.action === "update" && data.session.qrcode === "") {
         onClose();
       }
-    });
+    };
+
+    socket.on(`company-${companyId}-whatsappSession`, onWhatsappData);
 
     return () => {
-      socket.disconnect();
+      socket.off(`company-${companyId}-whatsappSession`, onWhatsappData);
     };
-  }, [whatsAppId, onClose, socketManager]);
+  }, [whatsAppId, onClose, user.companyId, socket]);
+
+  const instructions = [
+    {
+      icon: <Smartphone />,
+      text: "Abra o WhatsApp no seu celular",
+    },
+    {
+      icon: <MoreVert />,
+      text: "Toque em Mais opções no Android ou em Configurações no iPhone",
+    },
+    {
+      icon: <Link />,
+      text: "Toque em Dispositivos conectados e depois em Conectar dispositivos",
+    },
+    {
+      icon: <CameraAlt />,
+      text:
+        "Aponte a câmera do celular para esta tela para escanear o QR Code",
+    },
+  ];
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="lg" scroll="paper">
-      <DialogContent>
-        <Paper elevation={0} style={{ display: "flex", alignItems: "center" }}>
-          <div style={{ marginRight: "20px" }}>
-            <Typography variant="h2" component="h2" color="textPrimary" gutterBottom style={{ fontFamily: "Montserrat", fontWeight: "bold", fontSize:"20px",}}>
-              Utilize o Whaticket com seu WhatsApp:
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{
+        className: classes.dialogPaper,
+      }}
+    >
+      <DialogContent style={{ padding: 0 }}>
+        <Paper className={classes.contentPaper}>
+          <div className={classes.root}>
+            <Typography className={classes.brand}>
+              {/* você pode colocar o nome do sistema aqui, se quiser */}
             </Typography>
-            <Typography variant="body1" color="textPrimary" gutterBottom>
-              1 - Abra o WhatsApp no seu celular
+            <Typography className={classes.title}>
+              Conectar WhatsApp
             </Typography>
-            <Typography variant="body1" color="textPrimary" gutterBottom>
-              2 - Toque em Mais opções no Android <svg class="MuiSvgIcon-root" focusable="false" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path></svg> ou em Configurações <svg class="MuiSvgIcon-root" focusable="false" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"></path></svg> no iPhone
+            <Typography className={classes.subtitle}>
+              Escaneie o QR Code para vincular sua conta do WhatsApp
             </Typography>
-            <Typography variant="body1" color="textPrimary" gutterBottom>
-              3 - Toque em Dispositivos conectados e, em seguida, em Conectar dispositivos
-            </Typography>
-            <Typography variant="body1" color="textPrimary" gutterBottom>
-              4 - Aponte seu celular para essa tela para capturar o QR Code
-            </Typography>
-          </div>
-          <div>
+
             {qrCode ? (
-              <QRCode value={qrCode} size={256} />
+              <>
+                <div className={classes.qrContainer}>
+                  <QRCode
+                    value={qrCode}
+                    size={280}
+                    className={classes.qrCode}
+                    fgColor="#2d3748"
+                    bgColor="#ffffff"
+                    level="H"
+                  />
+                </div>
+
+                <div className={classes.timer}>Atualiza em: {timeLeft}s</div>
+
+                <div className={classes.instructions}>
+                  <Typography
+                    variant="subtitle2"
+                    color="textSecondary"
+                    gutterBottom
+                  >
+                    Como conectar:
+                  </Typography>
+                  <List className={classes.instructionList} dense>
+                    {instructions.map((instruction, index) => (
+                      <ListItem key={index} className={classes.listItem}>
+                        <ListItemIcon className={classes.listIcon}>
+                          {instruction.icon}
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={instruction.text}
+                          primaryTypographyProps={{ variant: "body2" }}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                </div>
+
+                <Typography
+                  variant="caption"
+                  color="textSecondary"
+                  style={{ marginTop: 16 }}
+                >
+                  O QR Code atualiza automaticamente a cada 60 segundos
+                </Typography>
+              </>
             ) : (
-              <span>Waiting for QR Code</span>
+              <div className={classes.loadingContainer}>
+                <CircularProgress
+                  size={40}
+                  style={{ color: "#667eea" }}
+                />
+                <Typography variant="body1" color="textSecondary">
+                  Aguardando pelo QR Code...
+                </Typography>
+              </div>
             )}
           </div>
         </Paper>

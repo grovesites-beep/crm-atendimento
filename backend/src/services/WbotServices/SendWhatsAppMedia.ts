@@ -1,109 +1,114 @@
-import { WAMessage, AnyMessageContent } from "@whiskeysockets/baileys";
+// src/services/WbotServices/SendWhatsAppMedia.ts
+import { WAMessage, AnyMessageContent } from "baileys";
 import * as Sentry from "@sentry/node";
-import fs from "fs";
+import fs, { unlinkSync } from "fs";
 import { exec } from "child_process";
 import path from "path";
 import ffmpegPath from "@ffmpeg-installer/ffmpeg";
+
 import AppError from "../../errors/AppError";
-import GetTicketWbot from "../../helpers/GetTicketWbot";
 import Ticket from "../../models/Ticket";
 import mime from "mime-types";
+import Contact from "../../models/Contact";
+import { getWbot } from "../../libs/wbot";
+import CreateMessageService from "../MessageServices/CreateMessageService";
 import formatBody from "../../helpers/Mustache";
 
 interface Request {
   media: Express.Multer.File;
   ticket: Ticket;
+  companyId?: number;
   body?: string;
-  isForwarded?: boolean;  
+  isPrivate?: boolean;
+  isForwarded?: boolean;
 }
 
 const publicFolder = path.resolve(__dirname, "..", "..", "..", "public");
 
-const processAudio = async (audio: string): Promise<string> => {
-  const outputAudio = `${publicFolder}/${new Date().getTime()}.mp3`;
+// Garante pasta da empresa
+const ensureCompanyFolder = (companyId: string) => {
+  const dir = path.join(publicFolder, `company${companyId}`);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  return dir;
+};
+
+// Heurística: alguns recipientes (ex.: .mpeg, .webm) podem vir como "video/*" mas serem usados como áudio.
+// Aqui decidimos extrair o áudio e mandar como PTT nesses casos.
+const looksLikeAudioContainer = (ext: string, mimetype: string) => {
+  const e = ext.toLowerCase();
+  const mt = (mimetype || "").toLowerCase();
+  if (mt.startsWith("audio/")) return true;
+
+  // Trata .mpeg/.mpg (muito comum o usuário enviar “Arquivo MPEG (.mpeg)” achando que é áudio)
+  if (e === ".mpeg" || e === ".mpg") return true;
+
+  // Gravações web via navegador costumam vir em webm (com áudio Opus). Se quiser sempre PTT, trate como áudio:
+  if (e === ".webm" && mt.includes("webm")) return true;
+
+  // Outros formatos de áudio comuns:
+  if ([".mp3", ".m4a", ".aac", ".wav", ".oga", ".ogg"].includes(e)) return true;
+
+  return false;
+};
+
+// Converte QUALQUER input para OGG/Opus 48k mono (excelente para WhatsApp PTT)
+const processAudioToOpus = async (inputPath: string, companyId: string): Promise<string> => {
+  const dir = ensureCompanyFolder(companyId);
+  const outputPath = path.join(dir, `${Date.now()}.ogg`);
+
+  const cmd =
+    `"${ffmpegPath.path}" -y -i "${inputPath}" ` +
+    `-vn -ar 48000 -ac 1 -c:a libopus -b:a 48k "${outputPath}"`;
+
   return new Promise((resolve, reject) => {
-    exec(
-      `${ffmpegPath.path} -i ${audio} -vn -ab 128k -ar 44100 -f ipod ${outputAudio} -y`,
-      (error, _stdout, _stderr) => {
-        if (error) reject(error);
-        fs.unlinkSync(audio);
-        resolve(outputAudio);
-      }
-    );
+    exec(cmd, (error) => (error ? reject(error) : resolve(outputPath)));
   });
 };
 
-const processAudioFile = async (audio: string): Promise<string> => {
-  const outputAudio = `${publicFolder}/${new Date().getTime()}.mp3`;
-  return new Promise((resolve, reject) => {
-    exec(
-      `${ffmpegPath.path} -i ${audio} -vn -ar 44100 -ac 2 -b:a 192k ${outputAudio}`,
-      (error, _stdout, _stderr) => {
-        if (error) reject(error);
-        fs.unlinkSync(audio);
-        resolve(outputAudio);
-      }
-    );
-  });
-};
-
+// Também usado por filas/rotas externas
 export const getMessageOptions = async (
   fileName: string,
   pathMedia: string,
-  body?: string
-): Promise<any> => {
-  const mimeType = mime.lookup(pathMedia);
-  const typeMessage = mimeType.split("/")[0];
+  companyId?: string,
+  body: string = " "
+): Promise<AnyMessageContent | null> => {
+  const mimeType = mime.lookup(pathMedia) || "";
+  const ext = path.extname(pathMedia || fileName || "").toLowerCase();
 
   try {
-    if (!mimeType) {
-      throw new Error("Invalid mimetype");
-    }
     let options: AnyMessageContent;
 
-    if (typeMessage === "video") {
+    if (looksLikeAudioContainer(ext, mimeType)) {
+      const converted = await processAudioToOpus(pathMedia, companyId || "0");
+      options = {
+        audio: fs.readFileSync(converted),
+        mimetype: "audio/ogg; codecs=opus",
+        ptt: true
+      };
+      // opcional: apagar o convertido se não quiser manter
+      // unlinkSync(converted);
+    } else if (mimeType.startsWith("video/")) {
       options = {
         video: fs.readFileSync(pathMedia),
-        caption: body ? body : '',
-        fileName: fileName
-        // gifPlayback: true
+        caption: body || undefined,
+        fileName
       };
-    } else if (typeMessage === "audio") {
-      const typeAudio = true; //fileName.includes("audio-record-site");
-      const convert = await processAudio(pathMedia);
-      if (typeAudio) {
-        options = {
-          audio: fs.readFileSync(convert),
-          mimetype: typeAudio ? "audio/mp4" : mimeType,
-          caption: body ? body : null,
-          ptt: true
-        };
-      } else {
-        options = {
-          audio: fs.readFileSync(convert),
-          mimetype: typeAudio ? "audio/mp4" : mimeType,
-          caption: body ? body : null,
-          ptt: true
-        };
-      }
-    } else if (typeMessage === "document") {
+    } else if (
+      mimeType.startsWith("application/") ||
+      mimeType.startsWith("text/") ||
+      mimeType === "application/pdf"
+    ) {
       options = {
         document: fs.readFileSync(pathMedia),
-        caption: body ? body : null,
-        fileName: fileName,
-        mimetype: mimeType
-      };
-    } else if (typeMessage === "application") {
-      options = {
-        document: fs.readFileSync(pathMedia),
-        caption: body ? body : null,
-        fileName: fileName,
+        caption: body || undefined,
+        fileName,
         mimetype: mimeType
       };
     } else {
+      // imagem (png/jpg/webp/gif…)
       options = {
         image: fs.readFileSync(pathMedia),
-        caption: body ? body : null
+        caption: body || undefined
       };
     }
 
@@ -118,78 +123,124 @@ export const getMessageOptions = async (
 const SendWhatsAppMedia = async ({
   media,
   ticket,
-  body,
+  body = "",
+  isPrivate = false,
   isForwarded = false
 }: Request): Promise<WAMessage> => {
   try {
-    const wbot = await GetTicketWbot(ticket);
+    const wbot = await getWbot(ticket.whatsappId);
+    const companyId = ticket.companyId.toString();
 
     const pathMedia = media.path;
-    const typeMessage = media.mimetype.split("/")[0];
+    const mimeType = media.mimetype || "";
+    const ext = path.extname(media.originalname || pathMedia || "").toLowerCase();
     let options: AnyMessageContent;
-    const bodyMessage = formatBody(body, ticket.contact)
+    const bodyMedia = ticket ? formatBody(body, ticket) : body;
 
-    if (typeMessage === "video") {
+    if (looksLikeAudioContainer(ext, mimeType)) {
+      // Converte e envia como PTT
+      const converted = await processAudioToOpus(pathMedia, companyId);
+      options = {
+        audio: fs.readFileSync(converted),
+        mimetype: "audio/ogg; codecs=opus",
+        ptt: true,
+        // caption em PTT geralmente não aparece; opcional manter fora
+        contextInfo: { forwardingScore: isForwarded ? 2 : 0, isForwarded }
+      };
+      // limpa arquivo convertido
+      unlinkSync(converted);
+    } else if (mimeType.startsWith("video/")) {
       options = {
         video: fs.readFileSync(pathMedia),
-        caption: bodyMessage,
-        fileName: media.originalname,
-        contextInfo: { forwardingScore: isForwarded ? 2 : 0, isForwarded: isForwarded }
-        // gifPlayback: true
+        caption: bodyMedia || undefined,
+        fileName: media.originalname.replace("/", "-"),
+        contextInfo: { forwardingScore: isForwarded ? 2 : 0, isForwarded }
       };
-    } else if (typeMessage === "audio") {
-      const typeAudio = media.originalname.includes("audio-record-site");
-      if (typeAudio) {
-        const convert = await processAudio(media.path);
-        options = {
-          audio: fs.readFileSync(convert),
-          mimetype: typeAudio ? "audio/mp4" : media.mimetype,
-          ptt: true,
-          contextInfo: { forwardingScore: isForwarded ? 2 : 0, isForwarded: isForwarded }
-        };
-      } else {
-        const convert = await processAudioFile(media.path);
-        options = {
-          audio: fs.readFileSync(convert),
-          mimetype: typeAudio ? "audio/mp4" : media.mimetype,
-          contextInfo: { forwardingScore: isForwarded ? 2 : 0, isForwarded: isForwarded }
-        };
-      }
-    } else if (typeMessage === "document" || typeMessage === "text") {
+    } else if (
+      mimeType.startsWith("application/") ||
+      mimeType.startsWith("text/") ||
+      mimeType === "application/pdf"
+    ) {
       options = {
         document: fs.readFileSync(pathMedia),
-        caption: bodyMessage,
-        fileName: media.originalname,
-        mimetype: media.mimetype,
-        contextInfo: { forwardingScore: isForwarded ? 2 : 0, isForwarded: isForwarded }
-      };
-    } else if (typeMessage === "application") {
-      options = {
-        document: fs.readFileSync(pathMedia),
-        caption: bodyMessage,
-        fileName: media.originalname,
-        mimetype: media.mimetype,
-        contextInfo: { forwardingScore: isForwarded ? 2 : 0, isForwarded: isForwarded }
+        caption: bodyMedia || undefined,
+        fileName: media.originalname.replace("/", "-"),
+        mimetype: mimeType,
+        contextInfo: { forwardingScore: isForwarded ? 2 : 0, isForwarded }
       };
     } else {
-      options = {
-        image: fs.readFileSync(pathMedia),
-        caption: bodyMessage,
-        contextInfo: { forwardingScore: isForwarded ? 2 : 0, isForwarded: isForwarded }
-      };
+      // imagem
+      if (mimeType.includes("gif")) {
+        options = {
+          image: fs.readFileSync(pathMedia),
+          caption: bodyMedia || undefined,
+          mimetype: "image/gif",
+          gifPlayback: true,
+          contextInfo: { forwardingScore: isForwarded ? 2 : 0, isForwarded }
+        };
+      } else {
+        options = {
+          image: fs.readFileSync(pathMedia),
+          caption: bodyMedia || undefined,
+          contextInfo: { forwardingScore: isForwarded ? 2 : 0, isForwarded }
+        };
+      }
     }
 
-    const sentMessage = await wbot.sendMessage(
-      `${ticket.contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"}`,
-      {
-        ...options
-      }
-    );
+    // Apenas registrar no banco (mensagem privada)
+if (isPrivate === true) {
+  const baseType = media.mimetype?.split("/")[0] ?? "document";
 
-    await ticket.update({ lastMessage: bodyMessage });
+  const messageData = {
+    wid: `PVT${companyId}${ticket.id}${(body || "").substring(0, 6)}`,
+    ticketId: ticket.id,
+    contactId: undefined,
+    body: bodyMedia,
+    fromMe: true,
+    mediaUrl: media.filename,
+    mediaType: baseType,
+    read: true,
+    quotedMsgId: null,
+    ack: 1,
+    remoteJid: null,
+    participant: null,
+    dataJson: null,
+    ticketTrakingId: null,
+    isPrivate
+  };
+
+  await CreateMessageService({ messageData, companyId: ticket.companyId });
+
+  // Retorna um stub apenas para satisfazer a assinatura (quem chama não usa esse retorno)
+  return {} as unknown as WAMessage;
+}
+
+
+    // Descobre o JID do contato
+    const contactNumber = await Contact.findByPk(ticket.contactId);
+    let number: string;
+
+    if (
+      contactNumber?.remoteJid &&
+      contactNumber.remoteJid !== "" &&
+      contactNumber.remoteJid.includes("@")
+    ) {
+      number = contactNumber.remoteJid;
+    } else {
+      number = `${contactNumber?.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"}`;
+    }
+
+    // Envia
+    const sentMessage = await wbot.sendMessage(number, { ...options });
+
+    await ticket.update({
+      lastMessage: body && body !== media.filename ? body : bodyMedia,
+      imported: null
+    });
 
     return sentMessage;
   } catch (err) {
+    console.log(`ERRO AO ENVIAR MIDIA ${ticket.id} media ${media.originalname}`);
     Sentry.captureException(err);
     console.log(err);
     throw new AppError("ERR_SENDING_WAPP_MSG");

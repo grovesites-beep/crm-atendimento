@@ -1,306 +1,316 @@
 import React, { useState, useEffect } from "react";
-import qs from 'query-string'
-
-import * as Yup from "yup";
-import { useHistory } from "react-router-dom";
-import { Link as RouterLink } from "react-router-dom";
-import { toast } from "react-toastify";
-import { Formik, Form, Field } from "formik";
-import usePlans from "../../hooks/usePlans";
-import Avatar from "@material-ui/core/Avatar";
-import Button from "@material-ui/core/Button";
-import CssBaseline from "@material-ui/core/CssBaseline";
-import TextField from "@material-ui/core/TextField";
-import Link from "@material-ui/core/Link";
-import Grid from "@material-ui/core/Grid";
-import Box from "@material-ui/core/Box";
-import InputMask from 'react-input-mask';
-import api from "../../services/api";
+import { useHistory, Link as RouterLink } from "react-router-dom";
 import {
-	FormControl,
-	InputLabel,
-	MenuItem,
-	Select,
+  Button,
+  CssBaseline,
+  TextField,
+  Link,
+  Grid,
+  Box,
+  Typography,
+  Container,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
 } from "@material-ui/core";
-import LockOutlinedIcon from "@material-ui/icons/LockOutlined";
-import Typography from "@material-ui/core/Typography";
+import { Helmet } from "react-helmet";
 import { makeStyles } from "@material-ui/core/styles";
-import Container from "@material-ui/core/Container";
-import { i18n } from "../../translate/i18n";
+import { toast, Toaster } from "sonner";
+import { User, Mail, Phone, Lock, Building2, CreditCard, ArrowLeft } from "lucide-react";
 
+import usePlans from "../../hooks/usePlans";
+import { i18n } from "../../translate/i18n";
 import { openApi } from "../../services/api";
 import toastError from "../../errors/toastError";
-import moment from "moment";
-const Copyright = () => {
-	return (
-		<Typography variant="body2" color="textSecondary" align="center">
-			{"Copyright © "}
-			<Link color="inherit" href="#">
-				PLW
-			</Link>{" "}
-		   {new Date().getFullYear()}
-			{"."}
-		</Typography>
-	);
-};
 
-const useStyles = makeStyles(theme => ({
-	paper: {
-		marginTop: theme.spacing(8),
-		display: "flex",
-		flexDirection: "column",
-		alignItems: "center",
-	},
-	avatar: {
-		margin: theme.spacing(1),
-		backgroundColor: theme.palette.secondary.main,
-	},
-	form: {
-		width: "100%",
-		marginTop: theme.spacing(3),
-	},
-	submit: {
-		margin: theme.spacing(3, 0, 2),
-	},
+const useStyles = makeStyles((theme) => ({
+  root: {
+    minHeight: "100vh",
+    background: "#f5f5f5",
+    display: "flex",
+    flexDirection: "column",
+  },
+  back: {
+    padding: 16,
+  },
+  paper: {
+    width: "100%",
+    maxWidth: 900, // mais largo no desktop
+    margin: "0 auto",
+    background: "#fff",
+    borderRadius: 16,
+    padding: 32,
+    boxShadow: "0 10px 30px rgba(0,0,0,0.1)",
+
+    // ajuste fino para telas menores
+    [theme.breakpoints.down("sm")]: {
+      maxWidth: 520,
+      padding: 24,
+    },
+  },
+  title: {
+    textAlign: "center",
+    fontWeight: "bold",
+    marginBottom: 8,
+  },
+  subtitle: {
+    textAlign: "center",
+    color: "#666",
+    fontSize: 14,
+    marginBottom: 24,
+  },
+  fieldRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 16,
+  },
+  icon: {
+    color: "#999",
+  },
+  submit: {
+    marginTop: 16,
+    padding: 12,
+    fontWeight: "bold",
+    backgroundColor: "#0b88e8",
+    color: "#fff",
+  },
+  footer: {
+    marginTop: 32,
+    textAlign: "center",
+    color: "#666",
+    fontSize: 13,
+    borderTop: "1px solid #ddd",
+    padding: 16,
+  },
 }));
 
-const UserSchema = Yup.object().shape({
-	name: Yup.string()
-		.min(2, "Too Short!")
-		.max(50, "Too Long!")
-		.required("Required"),
-	password: Yup.string().min(5, "Too Short!").max(50, "Too Long!"),
-	email: Yup.string().email("Invalid email").required("Required"),
-});
-
 const SignUp = () => {
-	const classes = useStyles();
-	const history = useHistory();
-	const [allowregister, setallowregister] = useState('enabled');
-    const [trial, settrial] = useState('3');
-	let companyId = null
+  const classes = useStyles();
+  const navigate = useHistory();
+  const { getPlanList } = usePlans();
 
-	useEffect(() => {
-        fetchallowregister();
-        fetchtrial();
-    }, []);
+  const [plans, setPlans] = useState([]);
+  const [userCreationEnabled, setUserCreationEnabled] = useState(true);
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+    phone: "",
+    companyId: null,
+    companyName: "",
+    planId: "",
+  });
 
+  const backendUrl =
+    process.env.REACT_APP_BACKEND_URL === "https://localhost:8090"
+      ? "https://localhost:8090"
+      : process.env.REACT_APP_BACKEND_URL;
 
-    const fetchtrial = async () => {
-  
- 
-    try {
-        const responsevvv = await api.get("/settings/trial");
-        const allowtrialX = responsevvv.data.value;
-        //console.log(allowregisterX);
-        settrial(allowtrialX);
-        } catch (error) {
-            console.error('Error retrieving trial', error);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const companyId = params.get("companyId");
+    if (companyId) setForm((prev) => ({ ...prev, companyId }));
+  }, []);
+
+  useEffect(() => {
+    const fetchUserCreationStatus = async () => {
+      try {
+        const response = await fetch(`${backendUrl}/settings/userCreation`);
+        const data = await response.json();
+
+        if (data.userCreation !== "enabled") {
+          toast.info("Cadastro de novos usuários está desabilitado.");
+          navigate("/login");
+          setUserCreationEnabled(false);
         }
+      } catch {
+        toast.error("Erro ao verificar permissão de cadastro.");
+        navigate("/login");
+      }
     };
 
+    fetchUserCreationStatus();
+  }, [backendUrl, navigate]);
 
-    const fetchallowregister = async () => {
-  
- 
-    try {
-        const responsevv = await api.get("/settings/allowregister");
-        const allowregisterX = responsevv.data.value;
-        //console.log(allowregisterX);
-        setallowregister(allowregisterX);
-        } catch (error) {
-            console.error('Error retrieving allowregister', error);
-        }
+  useEffect(() => {
+    const fetchPlans = async () => {
+      try {
+        const planList = await getPlanList({ listPublic: "false" });
+        setPlans(planList);
+      } catch (err) {
+        console.error(err);
+      }
     };
 
-    if(allowregister === "disabled"){
-    	history.push("/login");    
+    fetchPlans();
+  }, [getPlanList]);
+
+  if (!userCreationEnabled) return null;
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!form.name || !form.email || !form.companyName || !form.planId) {
+      toast.error("Preencha todos os campos obrigatórios.");
+      return;
     }
 
-	const params = qs.parse(window.location.search)
-	if (params.companyId !== undefined) {
-		companyId = params.companyId
-	}
+    try {
+      await openApi.post("/auth/signup", form);
+      toast.success(i18n.t("signup.toasts.success"));
+      navigate("/login");
+    } catch (err) {
+      toastError(err);
+    }
+  };
 
-	const initialState = { name: "", email: "", phone: "", password: "", planId: "disabled", };
+  return (
+    <div className={classes.root}>
+      <Helmet>
+        <title>Cadastre-se - AtendeTicket</title>
+      </Helmet>
+      <CssBaseline />
+      <Toaster />
 
-	const [user] = useState(initialState);
-	const dueDate = moment().add(trial, "day").format();
-	const handleSignUp = async values => {
-		Object.assign(values, { recurrence: "MENSAL" });
-		Object.assign(values, { dueDate: dueDate });
-		Object.assign(values, { status: "t" });
-		Object.assign(values, { campaignsEnabled: true });
-		try {
-			await openApi.post("/companies/cadastro", values);
-			toast.success(i18n.t("signup.toasts.success"));
-			history.push("/login");
-		} catch (err) {
-			console.log(err);
-			toastError(err);
-		}
-	};
+      {/* Botão Voltar */}
+      <div className={classes.back}>
+        <Link component={RouterLink} to="/">
+          <ArrowLeft />
+        </Link>
+      </div>
 
-	const [plans, setPlans] = useState([]);
-	const { register: listPlans } = usePlans();
+      <Container>
+        <div className={classes.paper}>
+          <Typography variant="h5" className={classes.title}>
+            Crie uma conta
+          </Typography>
+          <Typography className={classes.subtitle}>
+            Digite seus dados abaixo para criar sua conta
+          </Typography>
 
-	useEffect(() => {
-		async function fetchData() {
-			const list = await listPlans();
-			setPlans(list);
-		}
-		fetchData();
-	}, []);
+          <form onSubmit={handleSubmit}>
+            <Grid container spacing={2}>
+              {/* COLUNA ESQUERDA */}
+              <Grid item xs={12} md={6}>
+                {/* Empresa */}
+                <div className={classes.fieldRow}>
+                  <Building2 className={classes.icon} />
+                  <TextField
+                    fullWidth
+                    label="Empresa"
+                    name="companyName"
+                    value={form.companyName}
+                    onChange={handleChange}
+                  />
+                </div>
 
-	const logo = `${process.env.REACT_APP_BACKEND_URL}/public/logotipos/signup.png`;
-    const randomValue = Math.random(); // Generate a random number
-  
-    const logoWithRandom = `${logo}?r=${randomValue}`;
+                {/* Nome */}
+                <div className={classes.fieldRow}>
+                  <User className={classes.icon} />
+                  <TextField
+                    fullWidth
+                    label="Nome"
+                    name="name"
+                    value={form.name}
+                    onChange={handleChange}
+                  />
+                </div>
 
+                {/* Email */}
+                <div className={classes.fieldRow}>
+                  <Mail className={classes.icon} />
+                  <TextField
+                    fullWidth
+                    label="E-mail"
+                    name="email"
+                    type="email"
+                    value={form.email}
+                    onChange={handleChange}
+                  />
+                </div>
+              </Grid>
 
-	return (
-		<Container component="main" maxWidth="xs">
-			<CssBaseline />
-			<div className={classes.paper}>
-				<div>
-				<img style={{ margin: "0 auto", width: "80%" }} src={logoWithRandom} alt={`${process.env.REACT_APP_NAME_SYSTEM}`} />
-				</div>
-				{/*<Typography component="h1" variant="h5">
-					{i18n.t("signup.title")}
-				</Typography>*/}
-				{/* <form className={classes.form} noValidate onSubmit={handleSignUp}> */}
-				<Formik
-					initialValues={user}
-					enableReinitialize={true}
-					validationSchema={UserSchema}
-					onSubmit={(values, actions) => {
-						setTimeout(() => {
-							handleSignUp(values);
-							actions.setSubmitting(false);
-						}, 400);
-					}}
-				>
-					{({ touched, errors, isSubmitting }) => (
-						<Form className={classes.form}>
-							<Grid container spacing={2}>
-								<Grid item xs={12}>
-									<Field
-										as={TextField}
-										autoComplete="name"
-										name="name"
-										error={touched.name && Boolean(errors.name)}
-										helperText={touched.name && errors.name}
-										variant="outlined"
-										fullWidth
-										id="name"
-										label="Nome da Empresa"
-									/>
-								</Grid>
+              {/* COLUNA DIREITA */}
+              <Grid item xs={12} md={6}>
+                {/* Senha */}
+                <div className={classes.fieldRow}>
+                  <Lock className={classes.icon} />
+                  <TextField
+                    fullWidth
+                    label="Senha"
+                    name="password"
+                    type="password"
+                    value={form.password}
+                    onChange={handleChange}
+                  />
+                </div>
 
-								<Grid item xs={12}>
-									<Field
-										as={TextField}
-										variant="outlined"
-										fullWidth
-										id="email"
-										label={i18n.t("signup.form.email")}
-										name="email"
-										error={touched.email && Boolean(errors.email)}
-										helperText={touched.email && errors.email}
-										autoComplete="email"
-										required
-									/>
-								</Grid>
-								
-							<Grid item xs={12}>
-								<Field
-									as={InputMask}
-									mask="(99) 99999-9999"
-									variant="outlined"
-									fullWidth
-									id="phone"
-									name="phone"
-									error={touched.phone && Boolean(errors.phone)}
-									helperText={touched.phone && errors.phone}
-									autoComplete="phone"
-									required
-								>
-									{({ field }) => (
-										<TextField
-											{...field}
-											variant="outlined"
-											fullWidth
-											label="DDD988888888"
-											inputProps={{ maxLength: 11 }} // Definindo o limite de caracteres
-										/>
-									)}
-								</Field>
-							</Grid>
-								<Grid item xs={12}>
-									<Field
-										as={TextField}
-										variant="outlined"
-										fullWidth
-										name="password"
-										error={touched.password && Boolean(errors.password)}
-										helperText={touched.password && errors.password}
-										label={i18n.t("signup.form.password")}
-										type="password"
-										id="password"
-										autoComplete="current-password"
-										required
-									/>
-								</Grid>
-								<Grid item xs={12}>
-									<InputLabel htmlFor="plan-selection">Plano</InputLabel>
-									<Field
-										as={Select}
-										variant="outlined"
-										fullWidth
-										id="plan-selection"
-										label="Plano"
-										name="planId"
-										required
-									>
-                                        <MenuItem value="disabled" disabled>
-                                        	<em>Selecione seu plano de assinatura</em>
-										</MenuItem>
-										{plans.map((plan, key) => (
-											<MenuItem key={key} value={plan.id}>
-										        {plan.name} - {plan.connections} WhatsApps - {plan.users} Usuários - R$ {plan.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-											</MenuItem>
-										))}
-									</Field>
-								</Grid>
-							</Grid>
-							<Button
-								type="submit"
-								fullWidth
-								variant="contained"
-								color="primary"
-								className={classes.submit}
-							>
-								{i18n.t("signup.buttons.submit")}
-							</Button>
-							<Grid container justify="flex-end">
-								<Grid item>
-									<Link
-										href="#"
-										variant="body2"
-										component={RouterLink}
-										to="/login"
-									>
-										{i18n.t("signup.buttons.login")}
-									</Link>
-								</Grid>
-							</Grid>
-						</Form>
-					)}
-				</Formik>
-			</div>
-			<Box mt={5}>{/* <Copyright /> */}</Box>
-		</Container>
-	);
+                {/* Telefone */}
+                <div className={classes.fieldRow}>
+                  <Phone className={classes.icon} />
+                  <TextField
+                    fullWidth
+                    label="Telefone"
+                    name="phone"
+                    value={form.phone}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                {/* Plano */}
+                <div className={classes.fieldRow}>
+                  <CreditCard className={classes.icon} />
+                  <FormControl fullWidth>
+                    <InputLabel>Plano</InputLabel>
+                    <Select
+                      name="planId"
+                      value={form.planId}
+                      onChange={handleChange}
+                    >
+                      {plans.map((plan) => (
+                        <MenuItem key={plan.id} value={plan.id}>
+                          {plan.name} | Atendentes: {plan.users} | Whats: {plan.connections} | Filas: {plan.queues} | R$ {plan.amount}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </div>
+              </Grid>
+            </Grid>
+
+            {/* BOTÃO */}
+            <button
+              type="submit"
+              className="w-full bg-[#0b88e8] hover:bg-[#0b68b0] text-white font-medium py-3 rounded-lg transition mt-4"
+            >
+              Criar conta
+            </button>
+
+            <p className="text-center text-[#666] text-sm mt-6">
+              Já possui uma conta?{" "}
+              <RouterLink
+                to="/login"
+                className="text-[#0b88e8] hover:underline font-medium"
+              >
+                Entrar
+              </RouterLink>
+            </p>
+          </form>
+        </div>
+      </Container>
+
+      <footer className={classes.footer}>
+        AtendeTicket 2025 © Todos os direitos reservados
+      </footer>
+    </div>
+  );
 };
 
 export default SignUp;

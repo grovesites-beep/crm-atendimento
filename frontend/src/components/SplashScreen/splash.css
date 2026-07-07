@@ -1,0 +1,45 @@
+.splash-container {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #f8f9fa;
+  z-index: 9999;
+}
+
+.splash-card {
+  width: 420px;
+  padding: 30px;
+  border-radius: 18px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 10px 25px rgba(0,0,0,.07);
+  text-align: center;
+}
+
+.loader {
+  width: 64px;
+  height: 64px;
+  border: 5px solid #e5e7eb;
+  border-top-color: #0b88e8;
+  border-radius: 999px;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.progress-track {
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 20px;
+}
+
+.progress-bar {
+  background: #0b88e8;
+  height: 100%;
+  transition: width 0.35s ease;
+}

@@ -8,7 +8,6 @@ import React, {
 import { makeStyles } from "@material-ui/core/styles";
 import toastError from "../../errors/toastError";
 import Popover from "@material-ui/core/Popover";
-import ForumIcon from "@material-ui/icons/Forum";
 import {
   Badge,
   IconButton,
@@ -20,25 +19,68 @@ import {
 } from "@material-ui/core";
 import api from "../../services/api";
 import { isArray } from "lodash";
-import { SocketContext } from "../../context/Socket/SocketContext";
 import { useDate } from "../../hooks/useDate";
 import { AuthContext } from "../../context/Auth/AuthContext";
-
 import notifySound from "../../assets/chat_notify.mp3";
 import useSound from "use-sound";
 import { i18n } from "../../translate/i18n";
+import { MessageSquareWarning } from "lucide-react";
 
+/* ---------------------- ESTILOS MODERNOS ---------------------- */
 const useStyles = makeStyles((theme) => ({
   mainPaper: {
     flex: 1,
-    maxHeight: 300,
-    maxWidth: 500,
+    maxHeight: 340,
+    maxWidth: 360,
     padding: theme.spacing(1),
-    overflowY: "scroll",
+    overflowY: "auto",
+    borderRadius: 12,
+    boxShadow:
+      "0px 6px 18px rgba(0,0,0,0.1), 0px 2px 4px rgba(0,0,0,0.05)",
     ...theme.scrollbarStyles,
+  },
+
+  iconButton: {
+    color: "white",
+    transition: "all 0.2s ease",
+    "&:hover": {
+      transform: "scale(1.12)",
+      color: theme.palette.secondary.light,
+    },
+  },
+
+  popoverPaper: {
+    borderRadius: 12,
+    marginTop: 8,
+    overflow: "hidden",
+  },
+
+  listItem: {
+    borderRadius: 8,
+    marginBottom: 6,
+    border: "1px solid rgba(0,0,0,0.06)",
+    transition: "0.2s ease",
+    background: theme.palette.background.paper,
+    "&:hover": {
+      backgroundColor: theme.palette.action.hover,
+      transform: "translateX(2px)",
+    },
+  },
+
+  messageText: {
+    fontWeight: 500,
+    fontSize: 14,
+  },
+
+  dateText: {
+    fontSize: 12,
+    opacity: 0.7,
+    marginTop: 4,
+    display: "inline-block",
   },
 }));
 
+/* ---------------------- REDUCER ---------------------- */
 const reducer = (state, action) => {
   if (action.type === "LOAD_CHATS") {
     const chats = action.payload;
@@ -46,59 +88,29 @@ const reducer = (state, action) => {
 
     if (isArray(chats)) {
       chats.forEach((chat) => {
-        const chatIndex = state.findIndex((u) => u.id === chat.id);
-        if (chatIndex !== -1) {
-          state[chatIndex] = chat;
-        } else {
-          newChats.push(chat);
-        }
+        const idx = state.findIndex((u) => u.id === chat.id);
+        if (idx !== -1) state[idx] = chat;
+        else newChats.push(chat);
       });
     }
-
     return [...state, ...newChats];
   }
 
-  if (action.type === "UPDATE_CHATS") {
-    const chat = action.payload;
-    const chatIndex = state.findIndex((u) => u.id === chat.id);
-
-    if (chatIndex !== -1) {
-      state[chatIndex] = chat;
-      return [...state];
-    } else {
-      return [chat, ...state];
-    }
-  }
-
-  if (action.type === "DELETE_CHAT") {
-    const chatId = action.payload;
-
-    const chatIndex = state.findIndex((u) => u.id === chatId);
-    if (chatIndex !== -1) {
-      state.splice(chatIndex, 1);
-    }
-    return [...state];
-  }
-
-  if (action.type === "RESET") {
-    return [];
-  }
-
   if (action.type === "CHANGE_CHAT") {
-    const changedChats = state.map((chat) => {
-      if (chat.id === action.payload.chat.id) {
-        return action.payload.chat;
-      }
-      return chat;
-    });
-    return changedChats;
+    return state.map((c) =>
+      c.id === action.payload.chat.id ? action.payload.chat : c
+    );
   }
+
+  if (action.type === "RESET") return [];
+
+  return state;
 };
 
+/* ---------------------- COMPONENTE ---------------------- */
 export default function ChatPopover() {
   const classes = useStyles();
-
-  const { user } = useContext(AuthContext);
+  const { user, socket } = useContext(AuthContext);
 
   const [loading, setLoading] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
@@ -108,83 +120,68 @@ export default function ChatPopover() {
   const [chats, dispatch] = useReducer(reducer, []);
   const [invisible, setInvisible] = useState(true);
   const { datetimeToClient } = useDate();
+
   const [play] = useSound(notifySound);
   const soundAlertRef = useRef();
 
-  const socketManager = useContext(SocketContext);
-
+  /* ---------------------- NOTIFICAÇÃO DE SOM ---------------------- */
   useEffect(() => {
     soundAlertRef.current = play;
-
-    if (!("Notification" in window)) {
-      console.log("This browser doesn't support notifications");
-    } else {
-      Notification.requestPermission();
-    }
+    if ("Notification" in window) Notification.requestPermission();
   }, [play]);
 
+  /* ---------------------- RESET AO MUDAR BUSCA ---------------------- */
   useEffect(() => {
     dispatch({ type: "RESET" });
     setPageNumber(1);
   }, [searchParam]);
 
+  /* ---------------------- FETCH DOS CHATS ---------------------- */
   useEffect(() => {
     setLoading(true);
-    const delayDebounceFn = setTimeout(() => {
-      fetchChats();
-    }, 500);
-    return () => clearTimeout(delayDebounceFn);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const timeout = setTimeout(() => fetchChats(), 350);
+    return () => clearTimeout(timeout);
   }, [searchParam, pageNumber]);
 
+  /* ---------------------- SOCKET ---------------------- */
   useEffect(() => {
-    const companyId = localStorage.getItem("companyId");
-    const socket = socketManager.getSocket(companyId);
-    if (!socket) {
-      return () => {}; 
-    }
-    
-    socket.on(`company-${companyId}-chat`, (data) => {
-      if (data.action === "new-message") {
-        dispatch({ type: "CHANGE_CHAT", payload: data });
-        const userIds = data.newMessage.chat.users.map(userObj => userObj.userId);
+    if (!user.companyId) return;
 
-        if (userIds.includes(user.id) && data.newMessage.senderId !== user.id) {
+    const channel = `company-${user.companyId}-chat`;
+
+    const handleSocket = (data) => {
+      if (["new-message", "update"].includes(data.action)) {
+        dispatch({ type: "CHANGE_CHAT", payload: data });
+
+        if (data.newMessage && data.newMessage.senderId !== user.id) {
           soundAlertRef.current();
         }
       }
-      if (data.action === "update") {
-        dispatch({ type: "CHANGE_CHAT", payload: data });
-      }
-    });
-    return () => {
-      socket.disconnect();
     };
-  }, [socketManager, user.id]);
 
+    socket.on(channel, handleSocket);
+
+    return () => socket.off(channel, handleSocket);
+  }, [user]);
+
+  /* ---------------------- UNREADS ---------------------- */
   useEffect(() => {
-    let unreadsCount = 0;
-    if (chats.length > 0) {
-      for (let chat of chats) {
-        for (let chatUser of chat.users) {
-          if (chatUser.userId === user.id) {
-            unreadsCount += chatUser.unreads;
-          }
-        }
-      }
-    }
-    if (unreadsCount > 0) {
-      setInvisible(false);
-    } else {
-      setInvisible(true);
-    }
+    let unread = 0;
+    chats.forEach((chat) => {
+      chat.users.forEach((usr) => {
+        if (usr.userId === user.id) unread += usr.unreads;
+      });
+    });
+    setInvisible(unread === 0);
   }, [chats, user.id]);
 
+  /* ---------------------- FUNÇÕES ---------------------- */
   const fetchChats = async () => {
     try {
       const { data } = await api.get("/chats/", {
         params: { searchParam, pageNumber },
       });
+
       dispatch({ type: "LOAD_CHATS", payload: data.records });
       setHasMore(data.hasMore);
       setLoading(false);
@@ -193,98 +190,88 @@ export default function ChatPopover() {
     }
   };
 
-  const loadMore = () => {
-    setPageNumber((prevState) => prevState + 1);
-  };
+  const loadMore = () => setPageNumber((p) => p + 1);
 
   const handleScroll = (e) => {
     if (!hasMore || loading) return;
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
-    if (scrollHeight - (scrollTop + 100) < clientHeight) {
-      loadMore();
-    }
+    if (scrollHeight - scrollTop - clientHeight < 50) loadMore();
   };
 
-  const handleClick = (event) => {
-    setAnchorEl(event.currentTarget);
+  const handleClick = (e) => {
+    setAnchorEl(e.currentTarget);
     setInvisible(true);
   };
 
-  const handleClose = () => {
-    setAnchorEl(null);
-  };
+  const handleClose = () => setAnchorEl(null);
 
   const goToMessages = (chat) => {
     window.location.href = `/chats/${chat.uuid}`;
   };
 
   const open = Boolean(anchorEl);
-  const id = open ? "simple-popover" : undefined;
+  const id = open ? "chat-popover" : undefined;
 
+  /* ---------------------- RENDER ---------------------- */
   return (
     <div>
       <IconButton
         aria-describedby={id}
-        variant="contained"
-        color={invisible ? "default" : "inherit"}
         onClick={handleClick}
-        style={{ color: "white" }}
+        className={classes.iconButton}
       >
-        <Badge color="secondary" variant="dot" invisible={invisible}>
-          <ForumIcon />
+        <Badge
+          color="secondary"
+          variant="dot"
+          invisible={invisible}
+          overlap="circle"
+        >
+          <MessageSquareWarning size={22} />
         </Badge>
       </IconButton>
+
       <Popover
         id={id}
         open={open}
-        anchorEl={anchorEl}
         onClose={handleClose}
-        anchorOrigin={{
-          vertical: "bottom",
-          horizontal: "center",
-        }}
-        transformOrigin={{
-          vertical: "top",
-          horizontal: "center",
-        }}
+        anchorEl={anchorEl}
+        classes={{ paper: classes.popoverPaper }}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+        transformOrigin={{ vertical: "top", horizontal: "center" }}
       >
         <Paper
           variant="outlined"
-          onScroll={handleScroll}
           className={classes.mainPaper}
+          onScroll={handleScroll}
         >
-          <List
-            component="nav"
-            aria-label="main mailbox folders"
-            style={{ minWidth: 300 }}
-          >
+          <List style={{ padding: 8 }}>
             {isArray(chats) &&
-              chats.map((item, key) => (
+              chats.map((chat, index) => (
                 <ListItem
-                  key={key}
-                  style={{
-                    background: key % 2 === 0 ? "#ededed" : "white",
-                    border: "1px solid #eee",
-                    cursor: "pointer",
-                  }}
-                  onClick={() => goToMessages(item)}
+                  key={index}
+                  className={classes.listItem}
                   button
+                  onClick={() => goToMessages(chat)}
                 >
                   <ListItemText
-                    primary={item.lastMessage}
+                    primary={
+                      <span className={classes.messageText}>
+                        {chat.lastMessage || "(Sem mensagem)"}
+                      </span>
+                    }
                     secondary={
-                      <>
-                        <Typography component="span" style={{ fontSize: 12 }}>
-                          {datetimeToClient(item.updatedAt)}
-                        </Typography>
-                        <span style={{ marginTop: 5, display: "block" }}></span>
-                      </>
+                      <Typography className={classes.dateText}>
+                        {datetimeToClient(chat.updatedAt)}
+                      </Typography>
                     }
                   />
                 </ListItem>
               ))}
+
             {isArray(chats) && chats.length === 0 && (
-              <ListItemText primary={i18n.t("mainDrawer.appBar.notRegister")} />
+              <Typography style={{ padding: 16, opacity: 0.6 }}>
+                {i18n.t("mainDrawer.appBar.notRegister")}
+              </Typography>
             )}
           </List>
         </Paper>

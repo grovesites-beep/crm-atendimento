@@ -22,6 +22,8 @@ import TicketTraking from "./TicketTraking";
 import User from "./User";
 import UserRating from "./UserRating";
 import Whatsapp from "./Whatsapp";
+import CompaniesSettings from "./CompaniesSettings";
+import Invoices from "./Invoices";
 
 @Table
 class Company extends Model<Company> {
@@ -39,6 +41,15 @@ class Company extends Model<Company> {
   @Column
   email: string;
 
+  @Column({ defaultValue: "" })
+  document: string;
+
+  @Column({ defaultValue: "" })
+  paymentMethod: string;
+
+  @Column
+  lastLogin: Date;
+
   @Column
   status: boolean;
 
@@ -53,6 +64,29 @@ class Company extends Model<Company> {
   })
   schedules: [];
 
+  // 🔹 CONFIGURAÇÕES GLOBAIS (ADMIN / SAAS)
+
+  @Column({ defaultValue: "" })
+  mpAccessToken: string;
+
+  @Column({ defaultValue: "" })
+  smtpHost: string;
+
+  @Column({ defaultValue: "" })
+  smtpPort: string;
+
+  @Column({ defaultValue: "" })
+  smtpSecure: string; // "true" ou "false"
+
+  @Column({ defaultValue: "" })
+  smtpUser: string;
+
+  @Column({ defaultValue: "" })
+  smtpPass: string;
+
+  @Column({ defaultValue: "" })
+  smtpFrom: string;
+
   @ForeignKey(() => Plan)
   @Column
   planId: number;
@@ -65,6 +99,15 @@ class Company extends Model<Company> {
 
   @UpdatedAt
   updatedAt: Date;
+
+  @Column
+  folderSize: string;
+
+  @Column
+  numberFileFolder: string;
+
+  @Column
+  updatedAtFolder: string;
 
   @HasMany(() => User, {
     onUpdate: "CASCADE",
@@ -115,6 +158,13 @@ class Company extends Model<Company> {
   })
   settings: Setting[];
 
+  @HasMany(() => CompaniesSettings, {
+    onUpdate: "CASCADE",
+    onDelete: "CASCADE",
+    hooks: true
+  })
+  companieSettings: CompaniesSettings;
+
   @HasMany(() => Ticket, {
     onUpdate: "CASCADE",
     onDelete: "CASCADE",
@@ -128,6 +178,13 @@ class Company extends Model<Company> {
     hooks: true
   })
   ticketTrankins: TicketTraking[];
+
+  @HasMany(() => Invoices, {
+    onUpdate: "CASCADE",
+    onDelete: "CASCADE",
+    hooks: true
+  })
+  invoices: Invoices[];
 }
 
 export default Company;

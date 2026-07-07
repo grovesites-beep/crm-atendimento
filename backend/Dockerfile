@@ -83,7 +83,6 @@ COPY --from=build /app/certs ./certs
 # Build info files (presentes em runtime para fallback)
 COPY --from=build /app/.git-commit ./.git-commit
 COPY --from=build /app/.build-date ./.build-date
-COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/.sequelizerc ./.sequelizerc
 RUN mkdir -p ./private
 
